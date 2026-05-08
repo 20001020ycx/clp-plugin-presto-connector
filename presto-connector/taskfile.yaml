@@ -1,0 +1,14 @@
+version: "3"
+
+includes:
+  lint: "lint-tasks.yaml"
+
+tasks:
+  clean:
+    cmd: mvn clean
+
+  build:
+    cmd: mvn package -DskipTests
+
+  test:
+    cmd: mvn test

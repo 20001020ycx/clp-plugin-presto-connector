@@ -1,0 +1,19 @@
+<FindBugsFilter>
+  <Match>
+    <Bug category="MALICIOUS_CODE" code="EI" value="EI_EXPOSE_REP2" />
+    <Class name="com.facebook.presto.plugin.clp.ClpColumnHandle" />
+    <Justification>False positive: Presto SPI Type class is immutable, caller won't mutate it.</Justification>
+  </Match>
+
+  <Match>
+    <Bug category="BAD_PRACTICE" code="OBL" value="OBL_UNSATISFIED_OBLIGATION" />
+    <Justification>JDBC Statement resources are managed by the connection lifecycle, not individual try-with-resources.</Justification>
+  </Match>
+
+  <Match>
+    <Bug category="SECURITY" code="DMI" value="DMI_EMPTY_DB_PASSWORD" />
+    <Class name="com.facebook.presto.plugin.clp.ClpMetadataDbSetUp" />
+    <Justification>False positive: Testing database intentionally uses empty password, no security breach.</Justification>
+  </Match>
+
+</FindBugsFilter>
