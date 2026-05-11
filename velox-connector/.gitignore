@@ -1,0 +1,7 @@
+build/
+_build/
+cmake-build-*/
+dist/
+*.o
+*.so
+*.a
