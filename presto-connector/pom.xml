@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.yscope.presto</groupId>
+  <artifactId>clp-plugin-presto</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+
+  <name>CLP connector for Presto</name>
+  <description>
+    A Presto connector that enables for querying logs compressed with CLP.
+  </description>
+  <url>https://github.com/y-scope/clp-plugin-presto-connector</url>
+  <licenses>
+    <license>
+      <name>Apache License 2.0</name>
+      <url>https://apache.org/licenses/LICENSE-2.0</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <name>YScope Inc.</name>
+      <email>dev@yscope.com</email>
+      <organization>YScope Inc.</organization>
+      <organizationUrl>https://yscope.com</organizationUrl>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:git://github.com/y-scope/clp-plugin-presto-connector.git</connection>
+    <developerConnection>
+      scm:git:ssh://git@github.com/y-scope/clp-plugin-presto-connector.git
+    </developerConnection>
+    <url>https://github.com/y-scope/clp-plugin-presto-connector/tree/main</url>
+  </scm>
+
+  <properties>
+    <!-- Dependency versions -->
+    <airlift.version>0.228</airlift.version>
+    <commons-io.version>2.22.0</commons-io.version>
+    <commons-math3.version>3.6.1</commons-math3.version>
+    <guava.version>33.4.8-jre</guava.version>
+    <guice.version>6.0.0</guice.version>
+    <h2.version>2.4.240</h2.version>
+    <jackson.version>2.21.3</jackson.version>
+    <jackson-annotations.version>2.21</jackson-annotations.version>
+    <mysql.version>9.7.0</mysql.version>
+    <presto.version>0.297</presto.version>
+    <slice.version>0.38</slice.version>
+    <testng.version>7.12.0</testng.version>
+    <!-- Plugin versions -->
+    <clean.plugin.version>3.5.0</clean.plugin.version>
+    <compiler.plugin.version>3.15.0</compiler.plugin.version>
+    <jar.plugin.version>3.5.0</jar.plugin.version>
+    <resources.plugin.version>3.5.0</resources.plugin.version>
+    <shade.plugin.version>3.6.2</shade.plugin.version>
+    <surefire.plugin.version>3.5.5</surefire.plugin.version>
+  </properties>
+
+  <dependencies>
+    <!-- Compile -->
+    <dependency>
+      <groupId>com.facebook.airlift</groupId>
+      <artifactId>bootstrap</artifactId>
+      <version>${airlift.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.facebook.airlift</groupId>
+      <artifactId>configuration</artifactId>
+      <version>${airlift.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.facebook.airlift</groupId>
+      <artifactId>json</artifactId>
+      <version>${airlift.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.facebook.airlift</groupId>
+      <artifactId>log</artifactId>
+      <version>${airlift.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>${guava.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.inject</groupId>
+      <artifactId>guice</artifactId>
+      <version>${guice.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>javax.inject</groupId>
+      <artifactId>javax.inject</artifactId>
+      <version>1</version>
+    </dependency>
+
+    <!-- Provided -->
+    <dependency>
+      <groupId>com.facebook.presto</groupId>
+      <artifactId>presto-common</artifactId>
+      <version>${presto.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.facebook.presto</groupId>
+      <artifactId>presto-spi</artifactId>
+      <version>${presto.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+      <version>${jackson-annotations.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.airlift</groupId>
+      <artifactId>slice</artifactId>
+      <version>${slice.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- Runtime -->
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <version>${mysql.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- Test -->
+    <dependency>
+      <groupId>com.facebook.presto</groupId>
+      <artifactId>presto-main-base</artifactId>
+      <version>${presto.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.facebook.presto</groupId>
+      <artifactId>presto-main-base</artifactId>
+      <version>${presto.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.facebook.presto</groupId>
+      <artifactId>presto-parser</artifactId>
+      <version>${presto.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.facebook.presto</groupId>
+      <artifactId>presto-tests</artifactId>
+      <version>${presto.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>${h2.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>${commons-io.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-math3</artifactId>
+      <version>${commons-math3.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testng</groupId>
+      <artifactId>testng</artifactId>
+      <version>${testng.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>presto-0.297-clp-connector</finalName>
+    <pluginManagement>
+      <!-- Lock plugin versions to avoid using Maven defaults -->
+      <plugins>
+        <plugin>
+          <artifactId>maven-clean-plugin</artifactId>
+          <version>${clean.plugin.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${compiler.plugin.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>${jar.plugin.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>${resources.plugin.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>${shade.plugin.version}</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${surefire.plugin.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+    <plugins>
+    <!-- Maven processes plugins
+      a) in the order of the phases in the lifecycle, and
+      b) in order of appearance within each phase.
+      When configuring plugins below, we do our best to order and group by lifecycle phases. --> 
+
+      <!-- phase:package -->
+      <!-- Bundle all dependencies into a single fat JAR for deployment. -->
+      <plugin>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
