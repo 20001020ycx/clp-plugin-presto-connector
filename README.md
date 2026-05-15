@@ -7,12 +7,12 @@ A Presto connector to query [CLP](https://github.com/y-scope/clp) compressed log
 Presto is a distributed SQL query engine designed for running fast, interactive queries over large datasets from a variety of sources.
 It's widely used to explore and join datasets from data lakes, data warehouses, and operational stores.
 
-With the Presto CLP connector plugins, Presto can now work with semi-structured log data compressed in CLP format. We highlight the CLP connector's technical features that make querying semi-structured log data both faster and easier in [Presto RFC #37](https://github.com/prestodb/rfcs/pull/37).
+With the Presto CLP connector plugins, Presto can now work with semi-structured log data compressed in CLP format. We highlight the CLP connector's technical features that make querying semi-structured log data both faster and easier in [Presto RFC #37](https://github.com/prestodb/rfcs/pull/37) and this [blog](https://blog.yscope.com/querying-clp-compressed-logs-with-prestosql-71dff29a0b82).
 
-The figure below shows the architecture of the CLP connector with Presto. Blue components are existing Presto components, whereas red components are connector interfaces exposed to CLP. The Presto CLP connector is composed of two plugins, categorized by where they are plugged into the Presto architecture:
+The figure below shows the architecture of the CLP connector with Presto. Blue components are existing Presto components, whereas red components are connector interfaces tailored for querying CLP compressed logs. The Presto CLP connector is composed of two plugins, categorized by where they are plugged into the Presto architecture:
 
-- **[presto-connector](presto-connector)** — Java plugin for the Presto coordinator
-- **[velox-connector](velox-connector)** — C++ plugin for the Velox engine used by Presto workers
+- **[presto-connector](presto-connector)** — Java plugin for Presto coordinator
+- **[velox-connector](velox-connector)** — C++ plugin for Presto worker's Velox engine. 
 
 ![Architecture](assets/clp-presto-architecture.webp)
 
