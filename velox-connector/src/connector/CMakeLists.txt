@@ -16,7 +16,7 @@ target_include_directories(presto_clp_connector
 
 target_link_libraries(presto_clp_connector
         PUBLIC
-        clp_search
+        clp_connector_search
         PRIVATE
         clp_s::search
 )
