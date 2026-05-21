@@ -195,7 +195,6 @@
   </dependencies>
 
   <build>
-    <finalName>presto-0.297-clp-connector</finalName>
     <pluginManagement>
       <!-- Lock plugin versions to avoid using Maven defaults -->
       <plugins>
