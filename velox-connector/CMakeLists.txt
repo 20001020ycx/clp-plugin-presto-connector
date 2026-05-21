@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.28)
 
-project(libpresto_clp_plugin LANGUAGES CXX)
+project(libclp-plugin-velox-connector LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,25 +8,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Enable -fPIC for all targets so STATIC libraries can be linked into a shared library.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Match Presto worker's AVX2 flags to satisfy Folly's F14LinkCheck<Mode> symbol.
+# Match the Presto worker's AVX2 flags to satisfy Folly's F14LinkCheck<Mode> symbol.
 #
-# NOTE: Including Folly's F14 headers emits a call to F14LinkCheck<Mode>, where Mode
-# is determined at compile time by the CPU flags. This plugin includes Presto
-# worker's headers, which pull in Folly's F14 headers transitively. Presto
-# worker is built with AVX2 (Mode 2); if this plugin is built without it, it
-# emits a call to F14LinkCheck<1>, which Presto worker does not provide,
+# NOTE: Including Folly's F14 headers emits a call to F14LinkCheck<Mode>, where Mode is determined
+# at compile time by the CPU flags. This plugin includes the Presto worker's headers, which pull in
+# Folly's F14 headers transitively. The Presto worker is built with AVX2 (Mode 2); if this plugin is
+# built without it, it emits a call to F14LinkCheck<1>, which the Presto worker does not provide,
 # causing dlopen to fail with an unresolved symbol error.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
 
 # ==============================================================================
-# 1. Presto/Velox framework headers
+# Presto/Velox framework headers
 # ==============================================================================
 include(FetchContent)
 
-message(STATUS
-        "Downloading presto for headers "
-        "(commit: 8a20b604c8c6348aab671bcd723ea4482c9e3603)"
-)
+message(STATUS "Downloading presto for headers (commit: 8a20b604c8c6348aab671bcd723ea4482c9e3603)")
 FetchContent_Declare(
     presto_native_execution
     GIT_REPOSITORY    https://github.com/y-scope/presto.git
@@ -38,7 +34,7 @@ FetchContent_MakeAvailable(presto_native_execution)
 set(PRESTO_ROOT ${presto_native_execution_SOURCE_DIR}/presto-native-execution)
 
 # ==============================================================================
-# 2. CLP
+# CLP
 # ==============================================================================
 
 # CLP options — only build what the plugin needs.
@@ -49,10 +45,7 @@ set(CLP_BUILD_CLP_S_SEARCH_SQL OFF CACHE BOOL "Build CLP-S search SQL")
 set(CLP_BUILD_EXECUTABLES OFF CACHE BOOL "Build CLP executables")
 set(CLP_BUILD_TESTING OFF CACHE BOOL "Build CLP tests")
 
-message(STATUS
-        "Downloading CLP "
-        "(commit: a91e5f71f0715d7d6b3ea7c177e1b39b3e6a24a6)"
-)
+message(STATUS "Downloading CLP (commit: a91e5f71f0715d7d6b3ea7c177e1b39b3e6a24a6)")
 FetchContent_Declare(clp
   GIT_REPOSITORY https://github.com/y-scope/clp.git
   GIT_TAG        a91e5f71f0715d7d6b3ea7c177e1b39b3e6a24a6
@@ -61,7 +54,7 @@ FetchContent_Declare(clp
 FetchContent_MakeAvailable(clp)
 
 # ==============================================================================
-# 3. Plugin target
+# Plugin target
 # ==============================================================================
 
 # Plugin source tree
@@ -86,12 +79,12 @@ target_link_libraries(presto_clp_plugin
         presto_clp_connector
 )
 
-# Hide all symbols by default to prevent ODR clashes with presto_server.
+# Hide all symbols by default to prevent ODR clashes with the Presto worker.
 #
-# NOTE: The plugin and presto_server share overlapping dependencies (e.g., fmt) that may differ in
-# version. Without visibility control, the dynamic linker could resolve the plugin's calls to
-# presto_server's copy of those libraries at dlopen time, causing undefined behavior. The following
-# ensure the plugin uses its own copies of each dependency:
+# NOTE: The plugin and the Presto worker share overlapping dependencies (e.g., fmt) that may differ
+# in version. Without visibility control, the dynamic linker could resolve the plugin's calls to
+# the Presto worker's copy of those libraries at dlopen time, causing undefined behavior. The
+# following ensure the plugin uses its own copies of each dependency:
 #
 # - Static linking embeds dependency code into the .so (resolved at link time)
 # - CXX_VISIBILITY_PRESET hidden hides those symbols from the dynamic table
