@@ -5,13 +5,13 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.yscope.presto</groupId>
-  <artifactId>clp-plugin-presto</artifactId>
+  <artifactId>clp-plugin-presto-connector</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <packaging>jar</packaging>
 
-  <name>CLP connector for Presto</name>
+  <name>Presto connector for CLP</name>
   <description>
-    A Presto connector that enables for querying logs compressed with CLP.
+    A Presto connector that enables querying logs that were compressed with CLP.
   </description>
   <url>https://github.com/y-scope/clp-plugin-presto-connector</url>
   <licenses>
@@ -50,10 +50,11 @@
     <presto.version>0.297</presto.version>
     <slice.version>0.38</slice.version>
     <testng.version>7.12.0</testng.version>
+
     <!-- Plugin versions -->
     <clean.plugin.version>3.5.0</clean.plugin.version>
     <compiler.plugin.version>3.15.0</compiler.plugin.version>
-    <jar.plugin.version>3.5.0</jar.plugin.version>
+    <jar.plugin.version>4.0.0</jar.plugin.version>
     <resources.plugin.version>3.5.0</resources.plugin.version>
     <shade.plugin.version>3.6.2</shade.plugin.version>
     <surefire.plugin.version>3.5.5</surefire.plugin.version>
@@ -226,7 +227,7 @@
     </pluginManagement>
 
     <plugins>
-    <!-- Maven processes plugins
+      <!-- Maven processes plugins
       a) in the order of the phases in the lifecycle, and
       b) in order of appearance within each phase.
       When configuring plugins below, we do our best to order and group by lifecycle phases. --> 
