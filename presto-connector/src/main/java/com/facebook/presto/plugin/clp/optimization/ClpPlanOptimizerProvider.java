@@ -2,9 +2,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,41 +11,42 @@
  */
 package com.facebook.presto.plugin.clp.optimization;
 
-import com.facebook.presto.plugin.clp.split.filter.ClpSplitFilterProvider;
+import java.util.Set;
+import javax.inject.Inject;
+
 import com.facebook.presto.spi.ConnectorPlanOptimizer;
 import com.facebook.presto.spi.connector.ConnectorPlanOptimizerProvider;
 import com.facebook.presto.spi.function.FunctionMetadataManager;
 import com.facebook.presto.spi.function.StandardFunctionResolution;
 import com.google.common.collect.ImmutableSet;
 
-import javax.inject.Inject;
+import com.facebook.presto.plugin.clp.split.filter.ClpSplitFilterProvider;
 
-import java.util.Set;
-
-public class ClpPlanOptimizerProvider
-        implements ConnectorPlanOptimizerProvider
-{
+public class ClpPlanOptimizerProvider implements ConnectorPlanOptimizerProvider {
     private final FunctionMetadataManager functionManager;
     private final StandardFunctionResolution functionResolution;
     private final ClpSplitFilterProvider splitFilterProvider;
 
     @Inject
-    public ClpPlanOptimizerProvider(FunctionMetadataManager functionManager, StandardFunctionResolution functionResolution, ClpSplitFilterProvider splitFilterProvider)
-    {
+    public ClpPlanOptimizerProvider(
+            FunctionMetadataManager functionManager,
+            StandardFunctionResolution functionResolution,
+            ClpSplitFilterProvider splitFilterProvider
+    ) {
         this.functionManager = functionManager;
         this.functionResolution = functionResolution;
         this.splitFilterProvider = splitFilterProvider;
     }
 
     @Override
-    public Set<ConnectorPlanOptimizer> getLogicalPlanOptimizers()
-    {
+    public Set<ConnectorPlanOptimizer> getLogicalPlanOptimizers() {
         return ImmutableSet.of(new ClpUdfRewriter(functionManager));
     }
 
     @Override
-    public Set<ConnectorPlanOptimizer> getPhysicalPlanOptimizers()
-    {
-        return ImmutableSet.of(new ClpComputePushDown(functionManager, functionResolution, splitFilterProvider));
+    public Set<ConnectorPlanOptimizer> getPhysicalPlanOptimizers() {
+        return ImmutableSet.of(
+                new ClpComputePushDown(functionManager, functionResolution, splitFilterProvider)
+        );
     }
 }

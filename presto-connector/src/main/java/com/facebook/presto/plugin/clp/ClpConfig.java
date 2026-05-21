@@ -2,9 +2,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,13 +11,12 @@
  */
 package com.facebook.presto.plugin.clp;
 
+import java.util.regex.Pattern;
+
 import com.facebook.airlift.configuration.Config;
 import com.facebook.presto.spi.PrestoException;
 
-import java.util.regex.Pattern;
-
-public class ClpConfig
-{
+public class ClpConfig {
     public static final Pattern SAFE_SQL_TABLE_NAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_]+$");
 
     private boolean polymorphicTypeEnabled = true;
@@ -37,168 +34,122 @@ public class ClpConfig
     private SplitFilterProviderType splitFilterProviderType = SplitFilterProviderType.MYSQL;
     private SplitProviderType splitProviderType = SplitProviderType.MYSQL;
 
-    public boolean isPolymorphicTypeEnabled()
-    {
-        return polymorphicTypeEnabled;
-    }
+    public boolean isPolymorphicTypeEnabled() { return polymorphicTypeEnabled; }
 
     @Config("clp.polymorphic-type-enabled")
-    public ClpConfig setPolymorphicTypeEnabled(boolean polymorphicTypeEnabled)
-    {
+    public ClpConfig setPolymorphicTypeEnabled(boolean polymorphicTypeEnabled) {
         this.polymorphicTypeEnabled = polymorphicTypeEnabled;
         return this;
     }
 
-    public MetadataProviderType getMetadataProviderType()
-    {
-        return metadataProviderType;
-    }
+    public MetadataProviderType getMetadataProviderType() { return metadataProviderType; }
 
     @Config("clp.metadata-provider-type")
-    public ClpConfig setMetadataProviderType(MetadataProviderType metadataProviderType)
-    {
+    public ClpConfig setMetadataProviderType(MetadataProviderType metadataProviderType) {
         this.metadataProviderType = metadataProviderType;
         return this;
     }
 
-    public String getMetadataDbUrl()
-    {
-        return metadataDbUrl;
-    }
+    public String getMetadataDbUrl() { return metadataDbUrl; }
 
     @Config("clp.metadata-db-url")
-    public ClpConfig setMetadataDbUrl(String metadataDbUrl)
-    {
+    public ClpConfig setMetadataDbUrl(String metadataDbUrl) {
         this.metadataDbUrl = metadataDbUrl;
         return this;
     }
 
-    public String getMetadataDbName()
-    {
-        return metadataDbName;
-    }
+    public String getMetadataDbName() { return metadataDbName; }
 
     @Config("clp.metadata-db-name")
-    public ClpConfig setMetadataDbName(String metadataDbName)
-    {
+    public ClpConfig setMetadataDbName(String metadataDbName) {
         this.metadataDbName = metadataDbName;
         return this;
     }
 
-    public String getMetadataDbUser()
-    {
-        return metadataDbUser;
-    }
+    public String getMetadataDbUser() { return metadataDbUser; }
 
     @Config("clp.metadata-db-user")
-    public ClpConfig setMetadataDbUser(String metadataDbUser)
-    {
+    public ClpConfig setMetadataDbUser(String metadataDbUser) {
         this.metadataDbUser = metadataDbUser;
         return this;
     }
 
-    public String getMetadataDbPassword()
-    {
-        return metadataDbPassword;
-    }
+    public String getMetadataDbPassword() { return metadataDbPassword; }
 
     @Config("clp.metadata-db-password")
-    public ClpConfig setMetadataDbPassword(String metadataDbPassword)
-    {
+    public ClpConfig setMetadataDbPassword(String metadataDbPassword) {
         this.metadataDbPassword = metadataDbPassword;
         return this;
     }
 
-    public String getMetadataTablePrefix()
-    {
-        return metadataTablePrefix;
-    }
+    public String getMetadataTablePrefix() { return metadataTablePrefix; }
 
     @Config("clp.metadata-table-prefix")
-    public ClpConfig setMetadataTablePrefix(String metadataTablePrefix)
-    {
-        if (metadataTablePrefix == null || !SAFE_SQL_TABLE_NAME_PATTERN.matcher(metadataTablePrefix).matches()) {
+    public ClpConfig setMetadataTablePrefix(String metadataTablePrefix) {
+        if (
+            metadataTablePrefix == null || !SAFE_SQL_TABLE_NAME_PATTERN.matcher(metadataTablePrefix)
+                    .matches()
+        ) {
             throw new PrestoException(
                     ClpErrorCode.CLP_UNSUPPORTED_CONFIG_OPTION,
-                    "Invalid metadataTablePrefix: " + metadataTablePrefix + ". Only alphanumeric characters and underscores are allowed.");
+                    "Invalid metadataTablePrefix: " + metadataTablePrefix
+                            + ". Only alphanumeric characters and underscores are allowed."
+            );
         }
 
         this.metadataTablePrefix = metadataTablePrefix;
         return this;
     }
 
-    public long getMetadataRefreshInterval()
-    {
-        return metadataRefreshInterval;
-    }
+    public long getMetadataRefreshInterval() { return metadataRefreshInterval; }
 
     @Config("clp.metadata-refresh-interval")
-    public ClpConfig setMetadataRefreshInterval(long metadataRefreshInterval)
-    {
+    public ClpConfig setMetadataRefreshInterval(long metadataRefreshInterval) {
         this.metadataRefreshInterval = metadataRefreshInterval;
         return this;
     }
 
-    public long getMetadataExpireInterval()
-    {
-        return metadataExpireInterval;
-    }
+    public long getMetadataExpireInterval() { return metadataExpireInterval; }
 
     @Config("clp.metadata-expire-interval")
-    public ClpConfig setMetadataExpireInterval(long metadataExpireInterval)
-    {
+    public ClpConfig setMetadataExpireInterval(long metadataExpireInterval) {
         this.metadataExpireInterval = metadataExpireInterval;
         return this;
     }
 
-    public String getSplitFilterConfig()
-    {
-        return splitFilterConfig;
-    }
+    public String getSplitFilterConfig() { return splitFilterConfig; }
 
     @Config("clp.split-filter-config")
-    public ClpConfig setSplitFilterConfig(String splitFilterConfig)
-    {
+    public ClpConfig setSplitFilterConfig(String splitFilterConfig) {
         this.splitFilterConfig = splitFilterConfig;
         return this;
     }
 
-    public SplitFilterProviderType getSplitFilterProviderType()
-    {
-        return splitFilterProviderType;
-    }
+    public SplitFilterProviderType getSplitFilterProviderType() { return splitFilterProviderType; }
 
     @Config("clp.split-filter-provider-type")
-    public ClpConfig setSplitFilterProviderType(SplitFilterProviderType splitFilterProviderType)
-    {
+    public ClpConfig setSplitFilterProviderType(SplitFilterProviderType splitFilterProviderType) {
         this.splitFilterProviderType = splitFilterProviderType;
         return this;
     }
 
-    public SplitProviderType getSplitProviderType()
-    {
-        return splitProviderType;
-    }
+    public SplitProviderType getSplitProviderType() { return splitProviderType; }
 
     @Config("clp.split-provider-type")
-    public ClpConfig setSplitProviderType(SplitProviderType splitProviderType)
-    {
+    public ClpConfig setSplitProviderType(SplitProviderType splitProviderType) {
         this.splitProviderType = splitProviderType;
         return this;
     }
 
-    public enum MetadataProviderType
-    {
+    public enum MetadataProviderType {
         MYSQL
     }
 
-    public enum SplitFilterProviderType
-    {
+    public enum SplitFilterProviderType {
         MYSQL
     }
 
-    public enum SplitProviderType
-    {
+    public enum SplitProviderType {
         MYSQL
     }
 }

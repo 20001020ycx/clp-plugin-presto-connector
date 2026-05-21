@@ -2,9 +2,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,13 +11,11 @@
  */
 package com.facebook.presto.plugin.clp.metadata;
 
-import com.facebook.presto.common.type.ArrayType;
-import com.facebook.presto.common.type.RowType;
-import com.facebook.presto.common.type.TimestampType;
-import com.facebook.presto.common.type.Type;
-import com.facebook.presto.plugin.clp.ClpColumnHandle;
-import com.facebook.presto.spi.PrestoException;
-import com.google.common.collect.ImmutableList;
+import static com.facebook.presto.common.type.BigintType.BIGINT;
+import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
+import static com.facebook.presto.common.type.DoubleType.DOUBLE;
+import static com.facebook.presto.common.type.VarcharType.VARCHAR;
+import static com.facebook.presto.plugin.clp.ClpErrorCode.CLP_UNSUPPORTED_TYPE;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -30,24 +26,25 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.facebook.presto.common.type.BigintType.BIGINT;
-import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
-import static com.facebook.presto.common.type.DoubleType.DOUBLE;
-import static com.facebook.presto.common.type.VarcharType.VARCHAR;
-import static com.facebook.presto.plugin.clp.ClpErrorCode.CLP_UNSUPPORTED_TYPE;
+import com.facebook.presto.common.type.ArrayType;
+import com.facebook.presto.common.type.RowType;
+import com.facebook.presto.common.type.TimestampType;
+import com.facebook.presto.common.type.Type;
+import com.facebook.presto.spi.PrestoException;
+import com.google.common.collect.ImmutableList;
+
+import com.facebook.presto.plugin.clp.ClpColumnHandle;
 
 /**
  * A representation of CLP's schema tree built by turning hierarchical column names (e.g., a.b.c)
  * with their types into a tree. The class handles name/type conflicts when the
  * `clp.polymorphic-type-enabled` option is enabled, and maps serialized CLP types to Presto types.
  */
-public class ClpSchemaTree
-{
+public class ClpSchemaTree {
     private final ClpNode root;
     private final boolean polymorphicTypeEnabled;
 
-    ClpSchemaTree(boolean polymorphicTypeEnabled)
-    {
+    ClpSchemaTree(boolean polymorphicTypeEnabled) {
         this.polymorphicTypeEnabled = polymorphicTypeEnabled;
         this.root = new ClpNode(""); // Root doesn't have an original name
     }
@@ -60,8 +57,7 @@ public class ClpSchemaTree
      * @param fullName Fully qualified column name using dot notation (e.g., "a.b.c").
      * @param type Serialized byte value representing the CLP column's type.
      */
-    public void addColumn(String fullName, byte type)
-    {
+    public void addColumn(String fullName, byte type) {
         Type prestoType = mapColumnType(type);
         String[] path = fullName.split("\\.");
         ClpNode current = root;
@@ -94,16 +90,14 @@ public class ClpSchemaTree
      *
      * @return List of ClpColumnHandle objects representing the full schema.
      */
-    public List<ClpColumnHandle> collectColumnHandles()
-    {
+    public List<ClpColumnHandle> collectColumnHandles() {
         ImmutableList.Builder<ClpColumnHandle> columns = new ImmutableList.Builder<>();
         for (Map.Entry<String, ClpNode> entry : root.children.entrySet()) {
             String name = entry.getKey();
             ClpNode child = entry.getValue();
             if (child.isLeaf()) {
                 columns.add(new ClpColumnHandle(name, child.originalName, child.type));
-            }
-            else {
+            } else {
                 Type rowType = buildRowType(child);
                 columns.add(new ClpColumnHandle(name, child.originalName, rowType));
             }
@@ -111,8 +105,7 @@ public class ClpSchemaTree
         return columns.build();
     }
 
-    private Type mapColumnType(byte type)
-    {
+    private Type mapColumnType(byte type) {
         switch (ClpSchemaTreeNodeType.fromType(type)) {
             case Integer:
                 return BIGINT;
@@ -136,19 +129,15 @@ public class ClpSchemaTree
         }
     }
 
-    private String resolvePolymorphicConflicts(ClpNode parent, String baseName, Type newType)
-    {
-        if (!polymorphicTypeEnabled) {
-            return baseName;
-        }
+    private String resolvePolymorphicConflicts(ClpNode parent, String baseName, Type newType) {
+        if (!polymorphicTypeEnabled) { return baseName; }
 
         boolean conflictDetected = false;
         if (parent.children.containsKey(baseName)) {
             ClpNode existing = parent.children.get(baseName);
             if (existing.type == null) {
                 conflictDetected = true;
-            }
-            else if (!existing.type.equals(newType)) {
+            } else if (!existing.type.equals(newType)) {
                 String existingSuffix = getTypeSuffix(existing.type);
                 String renamedExisting = baseName + "_" + existingSuffix;
                 parent.children.remove(baseName);
@@ -156,8 +145,7 @@ public class ClpSchemaTree
                 parent.conflictingBaseNames.add(baseName);
                 conflictDetected = true;
             }
-        }
-        else if (parent.conflictingBaseNames.contains(baseName)) {
+        } else if (parent.conflictingBaseNames.contains(baseName)) {
             conflictDetected = true;
         }
 
@@ -169,13 +157,11 @@ public class ClpSchemaTree
         return baseName;
     }
 
-    private String getTypeSuffix(Type type)
-    {
+    private String getTypeSuffix(Type type) {
         return (type instanceof ArrayType) ? "array" : type.getDisplayName();
     }
 
-    private Type buildRowType(ClpNode node)
-    {
+    private Type buildRowType(ClpNode node) {
         List<RowType.Field> fields = new ArrayList<>();
         List<String> sortedKeys = new ArrayList<>(node.children.keySet());
         Collections.sort(sortedKeys);
@@ -188,27 +174,21 @@ public class ClpSchemaTree
         return RowType.from(fields);
     }
 
-    private static class ClpNode
-    {
+    private static class ClpNode {
         Type type; // Only non-null for leaf nodes
         String originalName;
         Map<String, ClpNode> children = new HashMap<>();
         Set<String> conflictingBaseNames = new HashSet<>();
 
-        ClpNode(String originalName)
-        {
+        ClpNode(String originalName) {
             this.originalName = originalName;
         }
 
-        ClpNode(String originalName, Type type)
-        {
+        ClpNode(String originalName, Type type) {
             this.originalName = originalName;
             this.type = type;
         }
 
-        boolean isLeaf()
-        {
-            return children.isEmpty();
-        }
+        boolean isLeaf() { return children.isEmpty(); }
     }
 }
