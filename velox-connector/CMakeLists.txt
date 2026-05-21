@@ -61,19 +61,19 @@ FetchContent_MakeAvailable(clp)
 add_subdirectory(src)
 
 # Plugin target
-add_library(presto_clp_plugin SHARED
+add_library(clp-plugin-velox-connector SHARED
         src/ClpPluginEntry.cpp
         src/ClpPrestoToVeloxConnector.cpp
 )
 
-target_include_directories(presto_clp_plugin
+target_include_directories(clp-plugin-velox-connector
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${PRESTO_ROOT}
         ${PRESTO_ROOT}/velox
 )
 
-target_link_libraries(presto_clp_plugin
+target_link_libraries(clp-plugin-velox-connector
         PRIVATE
         presto_clp_protocol
         presto_clp_connector
@@ -89,13 +89,13 @@ target_link_libraries(presto_clp_plugin
 # - Static linking embeds dependency code into the .so (resolved at link time)
 # - CXX_VISIBILITY_PRESET hidden hides those symbols from the dynamic table
 # - VISIBILITY_INLINES_HIDDEN hides inline function symbols too
-set_target_properties(presto_clp_plugin
+set_target_properties(clp-plugin-velox-connector
         PROPERTIES
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON
 )
 
-target_link_options(presto_clp_plugin
+target_link_options(clp-plugin-velox-connector
         PRIVATE
         -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/plugin.map
 )
