@@ -37,24 +37,28 @@
   </scm>
 
   <properties>
-    <!-- Dependency versions -->
-    <airlift.version>0.228</airlift.version>
-    <commons-io.version>2.22.0</commons-io.version>
-    <commons-math3.version>3.6.1</commons-math3.version>
-    <guava.version>33.4.8-jre</guava.version>
-    <guice.version>6.0.0</guice.version>
-    <h2.version>2.4.240</h2.version>
-    <jackson.version>2.21.3</jackson.version>
-    <jackson-annotations.version>2.21</jackson-annotations.version>
-    <mysql.version>9.7.0</mysql.version>
+    <!-- Dependency versions that must stay in sync with Presto 0.297 -->
+    <jackson.version>2.15.4</jackson.version>
     <presto.version>0.297</presto.version>
     <slice.version>0.38</slice.version>
-    <testng.version>7.12.0</testng.version>
 
+    <!-- Compile dependency versions -->
+    <airlift.version>0.229</airlift.version>
+    <guava.version>33.6.0-jre</guava.version>
+    <guice.version>6.0.0</guice.version>
+
+    <!-- Runtime dependency versions -->
+    <mysql.version>9.7.0</mysql.version>
+
+    <!-- Test dependency versions -->
+    <commons-io.version>2.22.0</commons-io.version>
+    <commons-math3.version>3.6.1</commons-math3.version>
+    <h2.version>2.4.240</h2.version>
+    <testng.version>7.12.0</testng.version>
     <!-- Plugin versions -->
     <clean.plugin.version>3.5.0</clean.plugin.version>
     <compiler.plugin.version>3.15.0</compiler.plugin.version>
-    <jar.plugin.version>4.0.0</jar.plugin.version>
+    <jar.plugin.version>3.5.0</jar.plugin.version>
     <resources.plugin.version>3.5.0</resources.plugin.version>
     <shade.plugin.version>3.6.2</shade.plugin.version>
     <surefire.plugin.version>3.5.5</surefire.plugin.version>
@@ -124,7 +128,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-annotations</artifactId>
-      <version>${jackson-annotations.version}</version>
+      <version>${jackson.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
