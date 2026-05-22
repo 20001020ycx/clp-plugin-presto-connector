@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.28)
+# NOTE: 3.28.3 is the highest CMake version required by this plugin's dependencies.
+cmake_minimum_required(VERSION 3.28.3)
 
 project(libclp-plugin-velox-connector LANGUAGES CXX)
 
