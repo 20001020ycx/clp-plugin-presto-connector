@@ -1,0 +1,6 @@
+{
+  global:
+    registerExtensions;
+  local:
+    *;
+};

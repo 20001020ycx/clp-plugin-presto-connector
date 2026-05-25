@@ -1,0 +1,37 @@
+{ "timestamp": 1746003005.123456789, "floatValue": 0.00000000000000000000000000001234567891234500 }
+{ "timestamp": 1746003005.124, "floatValue": 1.234567891234500E9 }
+{ "timestamp": 1746003005.124100, "floatValue": 1E16 }
+{ "timestamp": 1746003005.125, "floatValue": 1.234567891234567E+9 }
+{ "timestamp": 1746003005.126, "floatValue": 1.234567891234567E+0009 }
+{ "timestamp": 1746003005.127000001, "floatValue": -1.234567891234567E-0009 }
+{ "timestamp": "2025-04-30T08:51:00Z", "floatValue": 1.234567891234567e9 }
+{ "timestamp": "2025-04-30T08:51:05Z", "floatValue": -1.234567891234567E9 }
+{ "timestamp": "2025-04-30T08:51:10Z", "floatValue": -1.234567891234567E-9 }
+{ "timestamp": "2025-04-30T08:51:15Z", "floatValue": -1.234567891234500E9 }
+{ "timestamp": "2025-04-30T08:51:20Z", "floatValue": -1E16 }
+{ "timestamp": "2025-04-30T08:51:25Z", "floatValue": -1.234567891234567E+9 }
+{ "timestamp": "2025-04-30T08:51:30Z", "floatValue": -1.234567891234567E+0009 }
+{ "timestamp": "2025-04-30T08:51:35Z", "floatValue": -1.234567891234567E-0009 }
+{ "timestamp": "2025-04-30T08:51:40Z", "floatValue": -1.234567891234567e9 }
+{ "timestamp": "2025-04-30T08:51:45Z", "floatValue": 1.000E0 }
+{ "timestamp": "2025-04-30T08:51:50Z", "floatValue": 1E0 }
+{ "timestamp": "2025-04-30T08:51:55Z", "floatValue": 0.000E0 }
+{ "timestamp": "2025-04-30T08:52:00Z", "floatValue": -0.000E0 }
+{ "timestamp": "2025-04-30T08:52:05Z", "floatValue": 0E0 }
+{ "timestamp": "2025-04-30T08:52:10Z", "floatValue": 0E-0000 }
+{ "timestamp": "2025-04-30T08:52:15Z", "floatValue": -0E+0000 }
+{ "timestamp": "2025-04-30T08:52:20Z", "floatValue": 0.000E-0000 }
+{ "timestamp": "2025-04-30T08:52:25Z", "floatValue": -0.000E+0000 }
+{ "timestamp": "2025-04-30T08:52:30Z", "floatValue": 1.000E+0 }
+{ "timestamp": "2025-04-30T08:52:35Z", "floatValue": 1.000E-0 }
+{ "timestamp": "2025-04-30T08:52:40Z", "floatValue": 1.000E-00 }
+{ "timestamp": "2025-04-30T08:52:45Z", "floatValue": 1.000000000000000E010 }
+{ "timestamp": "2025-04-30T08:52:50Z", "floatValue": 1.000000000000000E+010 }
+{ "timestamp": "2025-04-30T08:52:55Z", "floatValue": 1.7976931348623157E308}
+{ "timestamp": "2025-04-30T08:53:00Z", "floatValue": 4.9406564584124654E-324}
+{ "timestamp": "2025-04-30T08:53:05Z", "floatValue": 0.0000000000000000E0000 }
+{ "timestamp": "2025-04-30T08:53:10Z", "floatValue": -0.0000000000000000E0000 }
+
+{ "timestamp": "2025-04-30T08:53:15Z", "floatValue": 1.99999999999999999E0000 }
+{ "timestamp": "2025-04-30T08:53:20Z", "floatValue": 2.00000000000000001E0000 }
+{ "timestamp": "2025-04-30T08:53:25Z", "floatValue": 1.00000000000000001E0000 }
