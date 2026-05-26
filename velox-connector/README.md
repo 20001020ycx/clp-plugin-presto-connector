@@ -16,7 +16,7 @@ task velox-connector:build
 Or with CMake directly:
 
 ```shell
-task deps:install
+task deps:install-all
 cmake -S . -B build/velox-connector
 cmake --build build/velox-connector -j
 ```

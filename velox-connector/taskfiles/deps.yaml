@@ -271,7 +271,7 @@ tasks:
             - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
           CMAKE_PACKAGE_NAME: "simdjson"
           CMAKE_SETTINGS_DIR: "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}"
-          TAR_SHA256: "07a1bb3587aac18fd6a10a83fe4ab09f1100ab39f0cb73baea1317826b9f9e0d"
+          TAR_SHA256: "b091107844fe928158c5c2265c20360fff312889ddf7ebc4528a0f0f8f2ff9cd"
           TAR_URL: "https://github.com/simdjson/simdjson/archive/refs/tags/{{.VERSION}}.tar.gz"
           WORK_DIR: "{{.G_DEPS_CPP_DIR}}"
 
