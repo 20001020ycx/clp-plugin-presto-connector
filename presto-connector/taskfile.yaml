@@ -1,0 +1,19 @@
+version: "3"
+
+includes:
+  lint: "taskfiles/lint.yaml"
+  utils: "../tools/yscope-dev-utils/exports/taskfiles/utils/utils.yaml"
+
+vars:
+  G_BUILD_DIR: "{{.ROOT_DIR}}/target"
+
+tasks:
+  clean:
+    cmd: "rm -rf '{{.G_BUILD_DIR}}'"
+
+  init:
+    internal: true
+    silent: true
+    run: "once"
+    cmds:
+      - "mkdir -p '{{.G_BUILD_DIR}}'"
