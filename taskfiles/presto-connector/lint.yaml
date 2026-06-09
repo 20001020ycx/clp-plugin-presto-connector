@@ -1,0 +1,11 @@
+version: "3"
+
+tasks:
+  bug-check:
+    cmd: "mvn compile spotbugs:check"
+
+  lint:
+    cmd: "mvn spotless:apply"
+
+  lint-check:
+    cmd: "mvn spotless:check"
