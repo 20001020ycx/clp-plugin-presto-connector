@@ -1,5 +1,8 @@
 version: "3"
 
+includes:
+  yscope-dev-utils: "../../tools/yscope-dev-utils/exports/taskfiles/utils/utils.yaml"
+
 vars:
   G_DEPS_CPP_CMAKE_SETTINGS_DIR: "{{.G_DEPS_CPP_DIR}}/cmake-settings"
 
@@ -12,7 +15,7 @@ vars:
 tasks:
   install-all:
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-deps-and-generate-settings"
+      - task: "yscope-dev-utils:cmake:install-deps-and-generate-settings"
         vars:
           CMAKE_SETTINGS_DIR: "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}"
           CMAKE_SETTINGS_FILE: "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/all-deps.cmake"
@@ -44,7 +47,7 @@ tasks:
       VERSION: "20250512.0"
     run: "once"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-DCMAKE_BUILD_TYPE=Release"
@@ -65,18 +68,18 @@ tasks:
       VERSION: "4.13.2"
     run: "once"
 
-    # NOTE: We can't use `:yscope-dev-utils:cmake:install-remote-tar` (and by extension
+    # NOTE: We can't use `yscope-dev-utils:cmake:install-remote-tar` (and by extension
     # `utils:install-remote-cmake-lib`) since it doesn't yet support the `INCLUDE_PATTERNS` and
     # `NUM_COMPONENTS_TO_STRIP` parameters.
     cmds:
-      - task: ":yscope-dev-utils:remote:download-and-extract-tar"
+      - task: "yscope-dev-utils:remote:download-and-extract-tar"
         vars:
           FILE_SHA256: "9f18272a9b32b622835a3365f850dd1063d60f5045fb1e12ce475ae6e18a35bb"
           INCLUDE_PATTERNS: ["*/runtime/Cpp"]
           NUM_COMPONENTS_TO_STRIP: "3"
           OUTPUT_DIR: "{{.G_DEPS_CPP_DIR}}/antlr4-runtime-src"
           URL: "https://github.com/antlr/antlr4/archive/refs/tags/{{.VERSION}}.tar.gz"
-      - task: ":yscope-dev-utils:cmake:generate"
+      - task: "yscope-dev-utils:cmake:generate"
         vars:
           BUILD_DIR: "{{.G_DEPS_CPP_DIR}}/antlr4-runtime-build"
           EXTRA_ARGS:
@@ -90,11 +93,11 @@ tasks:
             # timestamp, which ensures the library gets rebuilt if the extracted files change.
             - "-DCMAKE_POLICY_DEFAULT_CMP0135=NEW"
           SOURCE_DIR: "{{.G_DEPS_CPP_DIR}}/antlr4-runtime-src"
-      - task: ":yscope-dev-utils:cmake:build"
+      - task: "yscope-dev-utils:cmake:build"
         vars:
           BUILD_DIR: "{{.G_DEPS_CPP_DIR}}/antlr4-runtime-build"
           JOBS: "{{.G_CPP_MAX_PARALLELISM_PER_BUILD_TASK}}"
-      - task: ":yscope-dev-utils:cmake:install"
+      - task: "yscope-dev-utils:cmake:install"
         vars:
           BUILD_DIR: "{{.G_DEPS_CPP_DIR}}/antlr4-runtime-build"
           CMAKE_PACKAGE_NAME: "antlr4-runtime"
@@ -107,7 +110,7 @@ tasks:
       VERSION: "1.87.0"
     run: "once"
     cmds:
-      - task: ":yscope-dev-utils:boost:download-and-install"
+      - task: "yscope-dev-utils:boost:download-and-install"
         vars:
           BUILD_AND_INSTALL_ARGS:
             - "cxxflags=-fPIC"
@@ -131,7 +134,7 @@ tasks:
       VERSION: "v3.0.1"
     run: "once"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-DCMAKE_BUILD_TYPE=Release"
@@ -149,7 +152,7 @@ tasks:
       VERSION: "11.2.0"
     run: "once"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-DCMAKE_BUILD_TYPE=Release"
@@ -171,7 +174,7 @@ tasks:
       - "microsoft-gsl"
       - "ystdlib"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_BOOST_LIB_NAME}}.cmake"
@@ -194,7 +197,7 @@ tasks:
       VERSION: "v4.0.0"
     run: "once"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-DCMAKE_BUILD_TYPE=Release"
@@ -214,7 +217,7 @@ tasks:
     deps:
       - task: "boost"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_BOOST_LIB_NAME}}.cmake"
@@ -236,7 +239,7 @@ tasks:
       VERSION: "v3.11.3"
     run: "once"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-DCMAKE_BUILD_TYPE=Release"
@@ -258,7 +261,7 @@ tasks:
       VERSION: "v4.6.4"
     run: "once"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-DCMAKE_BUILD_TYPE=Release"
@@ -278,7 +281,7 @@ tasks:
     deps:
       - "fmt"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_FMT_LIB_NAME}}.cmake"
@@ -301,7 +304,7 @@ tasks:
     deps:
       - task: "boost"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_BOOST_LIB_NAME}}.cmake"
@@ -321,7 +324,7 @@ tasks:
       VERSION: "1.5.7"
     run: "once"
     cmds:
-      - task: ":yscope-dev-utils:cmake:install-remote-tar"
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
             - "-DCMAKE_BUILD_TYPE=Release"
