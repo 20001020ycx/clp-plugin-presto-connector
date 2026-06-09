@@ -8,6 +8,9 @@ includes:
     taskfile: "../../tools/yscope-dev-utils/exports/taskfiles/utils/utils.yaml"
 
 tasks:
+  clean:
+    cmd: "rm -rf '{{.G_VELOX_CONNECTOR_BUILD_DIR}}'"
+
   build:
     deps:
       - task: "generate"
@@ -26,3 +29,5 @@ tasks:
         vars:
           BUILD_DIR: "{{.G_VELOX_CONNECTOR_BUILD_DIR}}"
           SOURCE_DIR: "{{.ROOT_DIR}}/velox-connector"
+          EXTRA_ARGS:
+            - "-DDEPS_CPP_DIR={{.G_DEPS_CPP_DIR}}"

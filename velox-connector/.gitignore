@@ -2,4 +2,3 @@ cmake-build-*/
 dist/
 *.o
 *.so
-*.a

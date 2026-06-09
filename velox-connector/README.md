@@ -1,10 +1,10 @@
-# Velox Connector
+# Presto CLP Velox connector plugin
 
 ## Requirements
 
 * CMake 3.28+
 * C++20 compatible compiler
-* [Task] 3.38.0+
+* [Task] >= 3.49.1
 
 ## Building
 

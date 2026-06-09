@@ -7,8 +7,8 @@ includes:
 
 vars:
   G_BUILD_DIR: "{{.ROOT_DIR}}/build"
-  G_DEPS_CPP_DIR: "{{.G_BUILD_DIR}}/deps/cpp"
   G_VELOX_CONNECTOR_BUILD_DIR: "{{.G_BUILD_DIR}}/velox-connector"
+  G_DEPS_CPP_DIR: "{{.G_VELOX_CONNECTOR_BUILD_DIR}}/deps/cpp"
 
 tasks:
   clean:
