@@ -2,13 +2,13 @@ version: "3"
 
 includes:
   lint: "taskfiles/lint.yaml"
-  velox-connector: "taskfiles/velox-connector/main.yaml"
   utils: "tools/yscope-dev-utils/exports/taskfiles/utils/utils.yaml"
+  velox-connector: "taskfiles/velox-connector/main.yaml"
 
 vars:
   G_BUILD_DIR: "{{.ROOT_DIR}}/build"
-  G_VELOX_CONNECTOR_BUILD_DIR: "{{.G_BUILD_DIR}}/velox-connector"
   G_DEPS_CPP_DIR: "{{.G_BUILD_DIR}}/deps/cpp"
+  G_VELOX_CONNECTOR_BUILD_DIR: "{{.G_BUILD_DIR}}/velox-connector"
 
 tasks:
   clean:
