@@ -4,7 +4,7 @@ includes:
   lint: "taskfiles/lint.yaml"
   presto-connector:
     taskfile: "taskfiles/presto-connector/main.yaml"
-    dir: "{{.ROOT_DIR}}/presto-connector"
+    dir: "presto-connector"
   utils: "tools/yscope-dev-utils/exports/taskfiles/utils/utils.yaml"
 
 vars:
