@@ -2,6 +2,8 @@
 
 ## Requirements
 
+* JDK 17
+* [Maven] 3.8+
 * [Task] >= 3.49.1
 
 ## Adding files
@@ -33,9 +35,13 @@ task lint:fix
 The commands above run all linting checks, but for performance you may want to run a subset using
 one of the tasks in the table below.
 
-| Task               | Description                              |
-|--------------------|------------------------------------------|
-| `lint:check-yaml`  | Runs the YAML linters.                   |
-| `lint:fix-yaml`    | Runs the YAML linters and fixes issues.  |
+| Task                     | Description                                            |
+|--------------------------|--------------------------------------------------------|
+| `lint:check-yaml`        | Runs the YAML linters.                                 |
+| `lint:fix-yaml`          | Runs the YAML linters and fixes issues.                |
+| `lint:check-java-lint`   | Runs the Java linters with Spotless.                   |
+| `lint:fix-java-lint`     | Runs the Java linters and fixes issues with Spotless.  |
+| `lint:check-java-bug`    | Runs Java static analyzer with SpotBugs.               |
 
+[Maven]: https://maven.apache.org/
 [Task]: https://taskfile.dev
