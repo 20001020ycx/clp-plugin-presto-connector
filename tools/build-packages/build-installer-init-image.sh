@@ -19,7 +19,7 @@ umask 0022
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 image_dir="${script_dir}/image"
 
-# Shared helpers: image_repo_from_origin (GHCR repo derivation) and _REPO_ROOT.
+# Shared helpers: resolve_image_repo (image repo derivation) and _REPO_ROOT.
 source "${script_dir}/dependency-image/utils.sh"
 
 show_help() {
@@ -104,7 +104,7 @@ case "${arch}" in
     *) panic "unsupported arch: ${arch} (expected amd64 or arm64)" ;;
 esac
 
-[[ -n "${repo}" ]] || repo="$(image_repo_from_origin)"
+[[ -n "${repo}" ]] || repo="$(resolve_image_repo)"
 
 # Docker tags forbid '+' and '~'; the shared helper rejects versions image tags can't
 # represent losslessly.

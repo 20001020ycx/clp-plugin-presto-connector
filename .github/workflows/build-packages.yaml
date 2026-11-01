@@ -55,6 +55,13 @@ concurrency:
 permissions:
   contents: "read"
 
+env:
+  # The GitHub token only authenticates to GHCR. The credential fallbacks in the jobs below
+  # therefore apply only while this variable is unset or `ghcr.io`: set the username/password
+  # secrets with any other registry.
+  CI_CONTAINER_REGISTRY: "${{vars.CI_CONTAINER_REGISTRY}}"
+  CI_CONTAINER_REGISTRY_REPO: "${{vars.CI_CONTAINER_REGISTRY_REPO}}"
+
 jobs:
   resolve-version:
     runs-on: >-
@@ -119,6 +126,8 @@ jobs:
     permissions:
       contents: "read"
       packages: "write"
+    # Without this the callee sees empty registry credentials and falls back to the GitHub token.
+    secrets: "inherit"
 
   build:
     needs: ["build-dependency-image", "resolve-version"]
@@ -146,8 +155,14 @@ jobs:
     container:
       image: "${{needs.build-dependency-image.outputs.image}}"
       credentials:
-        username: "${{github.actor}}"
-        password: "${{secrets.GITHUB_TOKEN}}"
+        username: >-
+          ${{secrets.CI_CONTAINER_REGISTRY_USERNAME
+          || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+          && github.actor) || ''}}
+        password: >-
+          ${{secrets.CI_CONTAINER_REGISTRY_PASSWORD
+          || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+          && secrets.GITHUB_TOKEN) || ''}}
     steps:
       - name: "Check out repository"
         uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"  # v7.0.0
@@ -252,13 +267,19 @@ jobs:
           path: "dist"
           merge-multiple: true
 
-      - name: "Log in to GHCR"
+      - name: "Log in to the container registry"
         if: "${{needs.resolve-version.outputs.publish == 'true'}}"
         uses: "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0"  # v4.4.0
         with:
-          registry: "ghcr.io"
-          username: "${{github.actor}}"
-          password: "${{secrets.GITHUB_TOKEN}}"
+          registry: "${{vars.CI_CONTAINER_REGISTRY || 'ghcr.io'}}"
+          username: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_USERNAME
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && github.actor) || ''}}
+          password: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_PASSWORD
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && secrets.GITHUB_TOKEN) || ''}}
 
       - name: "Set up Docker Buildx"
         uses: "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c"  # v4.2.0
@@ -268,7 +289,8 @@ jobs:
         env:
           PUBLISH: "${{needs.resolve-version.outputs.publish}}"
         run: |-
-          image_repo="ghcr.io/$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          source tools/build-packages/dependency-image/utils.sh
+          image_repo="$(resolve_image_repo)"
           shopt -s nullglob
           tarballs=(dist/*-linux-"${ARCH}".tar.gz)
           if (( ${#tarballs[@]} != 1 )); then
@@ -311,20 +333,26 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Log in to GHCR"
+      - name: "Log in to the container registry"
         uses: "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0"  # v4.4.0
         with:
-          registry: "ghcr.io"
-          username: "${{github.actor}}"
-          password: "${{secrets.GITHUB_TOKEN}}"
+          registry: "${{vars.CI_CONTAINER_REGISTRY || 'ghcr.io'}}"
+          username: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_USERNAME
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && github.actor) || ''}}
+          password: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_PASSWORD
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && secrets.GITHUB_TOKEN) || ''}}
 
       - name: "Create multi-arch manifest"
         run: |-
-          image_repo="ghcr.io/$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
           # Validate the version with the same shared helper the build script uses, so the
           # manifest tag always matches the per-arch tags (versions with characters Docker
           # tags can't represent, like '+' or '~', fail loudly instead of being mangled).
           source tools/build-packages/dependency-image/utils.sh
+          image_repo="$(resolve_image_repo)"
           if ! tag_version="$(package_version_to_image_tag "${VERSION}")"; then
             echo "::error::Version '${VERSION}' can't be used as an image tag"
             exit 1
