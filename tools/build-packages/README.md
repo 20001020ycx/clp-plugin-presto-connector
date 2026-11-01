@@ -45,11 +45,15 @@ docker run --rm -e WORKER_PLUGIN_INSTALL_PATH=/plugins -v "$(pwd)/plugins:/plugi
 Run `./tools/build-packages/build-installer-init-image.sh --help` to build it standalone from any package tarball.
 
 In CI, `build-packages.yaml` builds the image per architecture on every run and
-combines them into a multi-arch `:<version>` tag; pushes to GHCR happen only
-from the default branch and version tags. Local builds load the same
-`:<version>` tag (single-arch, for the build host) — a locally-built image
-therefore shadows the published one in your Docker daemon until you
-`docker pull` it.
+combines them into a multi-arch `:<version>` tag; pushes happen only from the
+default branch and version tags. Local builds load the same `:<version>` tag
+(single-arch, for the build host) — a locally-built image therefore shadows the
+published one in your Docker daemon until you `docker pull` it.
+
+Each architecture is built by one job that runs this same script, so the tarball
+never has to travel between jobs. The packages are uploaded as build artifacts
+purely as deliverables; set `CI_UPLOAD_PACKAGE_ARTIFACTS` to `false` where
+artifact storage is unavailable, and the workflow still publishes the images.
 
 The build runs inside a hash-tagged **build-env image** (`env-<hash>`) based on
 `manylinux_2_28`. `build-dependency-image.sh` resolves it from the local Docker

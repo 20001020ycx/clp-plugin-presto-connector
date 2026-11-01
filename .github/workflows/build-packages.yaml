@@ -129,11 +129,14 @@ jobs:
     # Without this the callee sees empty registry credentials and falls back to the GitHub token.
     secrets: "inherit"
 
+  # Packages and the installer image are built in one job, the same way a local build does, so the
+  # tarball never has to travel between jobs. Splitting them would need an artifact to carry it.
   build:
     needs: ["build-dependency-image", "resolve-version"]
     permissions:
       contents: "read"
-      packages: "read"
+      # To pull the build-env image and push the installer image.
+      packages: "write"
     strategy:
       # Build both architectures so one failure does not hide the other result.
       fail-fast: false
@@ -149,106 +152,8 @@ jobs:
       ${{ fromJSON(matrix.runner) }}
     timeout-minutes: 120
     env:
-      VERSION: "${{needs.resolve-version.outputs.version}}"
-    # Run package steps inside the build-env image, which provides Velox deps,
-    # JDK 17, go-task, and packaging tools.
-    container:
-      image: "${{needs.build-dependency-image.outputs.image}}"
-      credentials:
-        username: >-
-          ${{secrets.CI_CONTAINER_REGISTRY_USERNAME
-          || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
-          && github.actor) || ''}}
-        password: >-
-          ${{secrets.CI_CONTAINER_REGISTRY_PASSWORD
-          || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
-          && secrets.GITHUB_TOKEN) || ''}}
-    steps:
-      - name: "Check out repository"
-        uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"  # v7.0.0
-        with:
-          persist-credentials: false
-          # Required because taskfiles include shared utilities from the submodule.
-          submodules: true
-
-      - name: "Build packages"
-        id: "packages"
-        shell: "bash"
-        env:
-          MATRIX_ARCH: "${{matrix.arch}}"
-          AMD64_CPU_TARGET: "${{inputs.amd64_cpu_target || ''}}"
-          ARM64_CPU_TARGET: "${{inputs.arm64_cpu_target || ''}}"
-          ARM64_BUILD_TARGET: "${{inputs.arm64_build_target || ''}}"
-        run: |-
-          # Apply this architecture's inputs (blank uses the official presto-native
-          # defaults); see "Target-CPU flags" in tools/build-packages/README.md.
-          if [[ "${MATRIX_ARCH}" == "amd64" ]]; then
-            export CPU_TARGET="${AMD64_CPU_TARGET}"
-          else
-            export CPU_TARGET="${ARM64_CPU_TARGET}"
-            export ARM_BUILD_TARGET="${ARM64_BUILD_TARGET}"
-          fi
-
-          bash tools/build-packages/internal/container/build-artifacts.sh --version "${VERSION}"
-
-          shopt -s nullglob
-          for extension in deb rpm tar.gz; do
-            artifact_files=(packages/clp-plugin-presto-connector*."${extension}")
-            if (( ${#artifact_files[@]} != 1 )); then
-              echo "::error::Expected exactly one .${extension} artifact," \
-                "found ${#artifact_files[@]}"
-              exit 1
-            fi
-            printf '%s_filename=%s\n' \
-              "${extension//./_}" "${artifact_files[0]##*/}" >> "$GITHUB_OUTPUT"
-          done
-
-      - name: "Upload deb package"
-        uses: "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"  # v6.0.0
-        with:
-          name: "${{steps.packages.outputs.deb_filename}}"
-          path: "packages/${{steps.packages.outputs.deb_filename}}"
-          if-no-files-found: "error"
-          retention-days: 14
-
-      - name: "Upload rpm package"
-        uses: "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"  # v6.0.0
-        with:
-          name: "${{steps.packages.outputs.rpm_filename}}"
-          path: "packages/${{steps.packages.outputs.rpm_filename}}"
-          if-no-files-found: "error"
-          retention-days: 14
-
-      - name: "Upload tarball"
-        uses: "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"  # v6.0.0
-        with:
-          name: "${{steps.packages.outputs.tar_gz_filename}}"
-          path: "packages/${{steps.packages.outputs.tar_gz_filename}}"
-          if-no-files-found: "error"
-          retention-days: 14
-
-  # Build the busybox installer image per architecture from the tarball artifact. This runs
-  # on the native runner (not inside the build-env container) so docker/buildx is available.
-  image:
-    needs: ["build", "resolve-version"]
-    permissions:
-      contents: "read"
-      packages: "write"
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: "amd64"
-            runner: >-
-              ${{ vars.GH_RUNNER_LINUX_HEAVY_X64 || '["ubuntu-24.04"]' }}
-          - arch: "arm64"
-            runner: >-
-              ${{ vars.GH_RUNNER_LINUX_HEAVY_ARM64 || '["ubuntu-24.04-arm"]' }}
-    runs-on: >-
-      ${{ fromJSON(matrix.runner) }}
-    timeout-minutes: 30
-    env:
       ARCH: "${{matrix.arch}}"
+      VERSION: "${{needs.resolve-version.outputs.version}}"
     # Matrix legs share one output namespace, so each leg fills only its own arch's key
     # (the other resolves to empty and is ignored by the merge below).
     outputs:
@@ -259,16 +164,11 @@ jobs:
         uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"  # v7.0.0
         with:
           persist-credentials: false
+          # Required because taskfiles include shared utilities from the submodule.
+          submodules: true
 
-      - name: "Download tarball artifact"
-        uses: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"  # v8.0.1
-        with:
-          pattern: "*-linux-${{matrix.arch}}.tar.gz"
-          path: "dist"
-          merge-multiple: true
-
+      # Covers both pulling the build-env image below and pushing the installer image.
       - name: "Log in to the container registry"
-        if: "${{needs.resolve-version.outputs.publish == 'true'}}"
         uses: "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0"  # v4.4.0
         with:
           registry: "${{vars.CI_CONTAINER_REGISTRY || 'ghcr.io'}}"
@@ -284,39 +184,94 @@ jobs:
       - name: "Set up Docker Buildx"
         uses: "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c"  # v4.2.0
 
-      - name: "Build the installer image (and push when publishing)"
-        id: "image"
+      - name: "Build packages"
+        id: "packages"
+        shell: "bash"
         env:
-          PUBLISH: "${{needs.resolve-version.outputs.publish}}"
+          AMD64_CPU_TARGET: "${{inputs.amd64_cpu_target || ''}}"
+          ARM64_CPU_TARGET: "${{inputs.arm64_cpu_target || ''}}"
+          ARM64_BUILD_TARGET: "${{inputs.arm64_build_target || ''}}"
+        run: |-
+          # Apply this architecture's inputs (blank uses the official presto-native
+          # defaults); see "Target-CPU flags" in tools/build-packages/README.md.
+          if [[ "${ARCH}" == "amd64" ]]; then
+            export CPU_TARGET="${AMD64_CPU_TARGET}"
+          else
+            export CPU_TARGET="${ARM64_CPU_TARGET}"
+            export ARM_BUILD_TARGET="${ARM64_BUILD_TARGET}"
+          fi
+
+          # Resolves and pulls the build-env image, runs the build inside it, and loads the
+          # installer image locally, which validates that it builds even when not publishing.
+          bash tools/build-packages/build-packages.sh --version "${VERSION}"
+
+          shopt -s nullglob
+          for extension in deb rpm tar.gz; do
+            artifact_files=(packages/clp-plugin-presto-connector*."${extension}")
+            if (( ${#artifact_files[@]} != 1 )); then
+              echo "::error::Expected exactly one .${extension} artifact," \
+                "found ${#artifact_files[@]}"
+              exit 1
+            fi
+            printf '%s_filename=%s\n' \
+              "${extension//./_}" "${artifact_files[0]##*/}" >> "$GITHUB_OUTPUT"
+          done
+
+      # Rebuilding to push costs only a tarball copy on top of buildx's cache. Capture the digest
+      # so the manifest job combines the exact images this run built (per-arch tags are mutable and
+      # a concurrent run could move them in between).
+      - name: "Push the installer image"
+        id: "image"
+        if: "${{needs.resolve-version.outputs.publish == 'true'}}"
         run: |-
           source tools/build-packages/dependency-image/utils.sh
           image_repo="$(resolve_image_repo)"
           shopt -s nullglob
-          tarballs=(dist/*-linux-"${ARCH}".tar.gz)
+          tarballs=(packages/*-linux-"${ARCH}".tar.gz)
           if (( ${#tarballs[@]} != 1 )); then
             echo "::error::Expected exactly one tarball for ${ARCH}, found ${#tarballs[@]}"
             exit 1
-          fi
-          # Push from the default branch / tags; otherwise just build to validate. When
-          # pushing, capture the image digest so the manifest job can combine the exact
-          # images this run built (per-arch tags are mutable and a concurrent run could
-          # move them between this job and the manifest job).
-          args=(--load)
-          if [[ "${PUBLISH}" == "true" ]]; then
-            args=(--push --digest-file digest.txt)
           fi
           bash tools/build-packages/build-installer-init-image.sh \
             --tarball "${tarballs[0]}" \
             --arch "${ARCH}" \
             --repo "${image_repo}" \
-            "${args[@]}"
-          if [[ "${PUBLISH}" == "true" ]]; then
-            echo "digest_${ARCH}=$(cat digest.txt)" >> "$GITHUB_OUTPUT"
-          fi
+            --push \
+            --digest-file digest.txt
+          echo "digest_${ARCH}=$(cat digest.txt)" >> "$GITHUB_OUTPUT"
+
+      # Deliverables only; nothing downstream reads them, so a deployment without artifact storage
+      # can turn them off.
+      - name: "Upload deb package"
+        if: "vars.CI_UPLOAD_PACKAGE_ARTIFACTS != 'false'"
+        uses: "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"  # v6.0.0
+        with:
+          name: "${{steps.packages.outputs.deb_filename}}"
+          path: "packages/${{steps.packages.outputs.deb_filename}}"
+          if-no-files-found: "error"
+          retention-days: 14
+
+      - name: "Upload rpm package"
+        if: "vars.CI_UPLOAD_PACKAGE_ARTIFACTS != 'false'"
+        uses: "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"  # v6.0.0
+        with:
+          name: "${{steps.packages.outputs.rpm_filename}}"
+          path: "packages/${{steps.packages.outputs.rpm_filename}}"
+          if-no-files-found: "error"
+          retention-days: 14
+
+      - name: "Upload tarball"
+        if: "vars.CI_UPLOAD_PACKAGE_ARTIFACTS != 'false'"
+        uses: "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f"  # v6.0.0
+        with:
+          name: "${{steps.packages.outputs.tar_gz_filename}}"
+          path: "packages/${{steps.packages.outputs.tar_gz_filename}}"
+          if-no-files-found: "error"
+          retention-days: 14
 
   # Combine the per-architecture installer images into one multi-arch version tag.
   manifest:
-    needs: ["image", "resolve-version"]
+    needs: ["build", "resolve-version"]
     if: "${{needs.resolve-version.outputs.publish == 'true'}}"
     permissions:
       packages: "write"
@@ -325,8 +280,8 @@ jobs:
     timeout-minutes: 15
     env:
       VERSION: "${{needs.resolve-version.outputs.version}}"
-      DIGEST_AMD64: "${{needs.image.outputs.digest_amd64}}"
-      DIGEST_ARM64: "${{needs.image.outputs.digest_arm64}}"
+      DIGEST_AMD64: "${{needs.build.outputs.digest_amd64}}"
+      DIGEST_ARM64: "${{needs.build.outputs.digest_arm64}}"
     steps:
       - name: "Check out repository"
         uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"  # v7.0.0
