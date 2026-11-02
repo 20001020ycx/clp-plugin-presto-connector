@@ -17,7 +17,9 @@
 name: "clp-integration-tests"
 
 x-installer: &installer
-  image: "${CLP_PLUGIN_INSTALLER_IMAGE:-ghcr.io/y-scope/clp-plugin-presto-connector:0.1.0-SNAPSHOT}"
+  # Defaults track the registry the packaging scripts tag under, so that a configured registry
+  # does not leave compose looking for an image nobody built.
+  image: "${CLP_PLUGIN_INSTALLER_IMAGE:-${CI_CONTAINER_REGISTRY:-ghcr.io}/${CI_CONTAINER_REGISTRY_REPO:-y-scope/clp-plugin-presto-connector}:0.1.0-SNAPSHOT}"
 
 volumes:
   coordinator-plugin:

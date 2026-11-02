@@ -31,7 +31,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME: "build-env"
+  # The GitHub token only authenticates to GHCR. The credential fallbacks in the jobs below
+  # therefore apply only while this variable is unset or `ghcr.io`: set the username/password
+  # secrets with any other registry.
+  CI_CONTAINER_REGISTRY: "${{vars.CI_CONTAINER_REGISTRY}}"
+  CI_CONTAINER_REGISTRY_REPO: "${{vars.CI_CONTAINER_REGISTRY_REPO}}"
 
 jobs:
   plan:
@@ -54,17 +58,23 @@ jobs:
         run: |-
           source tools/build-packages/dependency-image/utils.sh
           build_env_hash=$(derive_build_env_hash)
-          image_repo="ghcr.io/$(printf '%s' "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
-          image=$(image_ref "${image_repo}" "${IMAGE_NAME}" "${build_env_hash}")
+          image_repo="$(resolve_image_repo)"
+          image=$(image_ref "${image_repo}" "${build_env_hash}")
           echo "ref=${image}" >> "$GITHUB_OUTPUT"
 
-      - name: "Log in to GHCR"
+      - name: "Log in to the container registry"
         if: "github.event_name != 'pull_request'"
         uses: "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0"  # v4.4.0
         with:
-          registry: "ghcr.io"
-          username: "${{github.actor}}"
-          password: "${{secrets.GITHUB_TOKEN}}"
+          registry: "${{vars.CI_CONTAINER_REGISTRY || 'ghcr.io'}}"
+          username: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_USERNAME
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && github.actor) || ''}}
+          password: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_PASSWORD
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && secrets.GITHUB_TOKEN) || ''}}
 
       - name: "Decide whether to build"
         id: "decide"
@@ -109,13 +119,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: "Log in to GHCR"
+      - name: "Log in to the container registry"
         if: "github.event_name != 'pull_request'"
         uses: "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0"  # v4.4.0
         with:
-          registry: "ghcr.io"
-          username: "${{github.actor}}"
-          password: "${{secrets.GITHUB_TOKEN}}"
+          registry: "${{vars.CI_CONTAINER_REGISTRY || 'ghcr.io'}}"
+          username: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_USERNAME
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && github.actor) || ''}}
+          password: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_PASSWORD
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && secrets.GITHUB_TOKEN) || ''}}
 
       - name: "Set up Docker Buildx"
         uses: "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c"  # v4.2.0
@@ -142,12 +158,18 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: "Log in to GHCR"
+      - name: "Log in to the container registry"
         uses: "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0"  # v4.4.0
         with:
-          registry: "ghcr.io"
-          username: "${{github.actor}}"
-          password: "${{secrets.GITHUB_TOKEN}}"
+          registry: "${{vars.CI_CONTAINER_REGISTRY || 'ghcr.io'}}"
+          username: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_USERNAME
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && github.actor) || ''}}
+          password: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_PASSWORD
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && secrets.GITHUB_TOKEN) || ''}}
 
       - name: "Create multi-arch manifest"
         env:

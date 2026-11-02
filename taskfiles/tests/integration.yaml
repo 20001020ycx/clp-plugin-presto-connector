@@ -2,6 +2,12 @@ version: "3"
 
 vars:
   G_INTEGRATION_TESTS_DIR: "{{.ROOT_DIR}}/integration-tests"
+  # The installer image that `task package` just tagged. Resolving it here keeps Compose and the
+  # packaging scripts in agreement, including for a fork or a registry value that needs normalizing.
+  G_INSTALLER_IMAGE:
+    sh: >-
+      bash -c 'source "{{.ROOT_DIR}}/tools/build-packages/dependency-image/utils.sh"
+      && printf "%s:0.1.0-SNAPSHOT" "$(resolve_image_repo)"'
 
 tasks:
   default:
@@ -27,11 +33,15 @@ tasks:
     desc: "Start the Presto cluster."
     deps: [":package"]
     dir: "{{.G_INTEGRATION_TESTS_DIR}}"
+    env:
+      CLP_PLUGIN_INSTALLER_IMAGE: "{{.CLP_PLUGIN_INSTALLER_IMAGE | default .G_INSTALLER_IMAGE}}"
     cmd: "docker compose up --detach"
 
   test:
     desc: "Run the integration tests against an already-running cluster."
     dir: "{{.G_INTEGRATION_TESTS_DIR}}"
+    env:
+      CLP_PLUGIN_INSTALLER_IMAGE: "{{.CLP_PLUGIN_INSTALLER_IMAGE | default .G_INSTALLER_IMAGE}}"
     cmd: "docker compose run --rm tests {{.CLI_ARGS}}"
 
   down:

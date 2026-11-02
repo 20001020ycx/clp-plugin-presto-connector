@@ -45,16 +45,49 @@ docker run --rm -e WORKER_PLUGIN_INSTALL_PATH=/plugins -v "$(pwd)/plugins:/plugi
 Run `./tools/build-packages/build-installer-init-image.sh --help` to build it standalone from any package tarball.
 
 In CI, `build-packages.yaml` builds the image per architecture on every run and
-combines them into a multi-arch `:<version>` tag; pushes to GHCR happen only
-from the default branch and version tags. Local builds load the same
-`:<version>` tag (single-arch, for the build host) — a locally-built image
-therefore shadows the published one in your Docker daemon until you
-`docker pull` it.
+combines them into a multi-arch `:<version>` tag; pushes happen only from the
+default branch and version tags. Local builds load the same `:<version>` tag
+(single-arch, for the build host) — a locally-built image therefore shadows the
+published one in your Docker daemon until you `docker pull` it.
+
+Each architecture is built by one job that runs this same script, so the tarball
+never has to travel between jobs. The packages are uploaded as build artifacts
+purely as deliverables; set `CI_UPLOAD_PACKAGE_ARTIFACTS` to `false` where
+artifact storage is unavailable, and the workflow still publishes the images.
 
 The build runs inside a hash-tagged **build-env image** (`env-<hash>`) based on
 `manylinux_2_28`. `build-dependency-image.sh` resolves it from the local Docker
-cache, this repository's GHCR package, or a local build, reusing the cached
-image on later runs.
+cache, the container registry, or a local build, reusing the cached image on
+later runs.
+
+Images live under `ghcr.io/<owner>/<repo>` by default, derived from the origin
+remote. `CI_CONTAINER_REGISTRY` and `CI_CONTAINER_REGISTRY_REPO` override the
+host and the path below it, and CI reads them from repository variables
+alongside the `CI_CONTAINER_REGISTRY_USERNAME` / `CI_CONTAINER_REGISTRY_PASSWORD`
+secrets. Any registry other than GHCR requires the two secrets: the GitHub token
+is used only while `CI_CONTAINER_REGISTRY` is unset or set to `ghcr.io`, so that a
+partial configuration fails instead of sending that token to another host. Set both
+to the same values CI uses when building locally against a private registry, and
+`docker login` to it first: an unauthenticated pull is not an error, it just falls
+back to rebuilding the image from scratch.
+
+Both images share that one repository and are told apart by tag: the installer
+uses `:<version>`, and the build-env image uses `:env-<hash>` (per-architecture
+builds add `-<arch>`). The build-env image is not a sub-repository such as
+`<repo>/build-env` because Docker Hub only accepts `<namespace>/<repository>`.
+For Docker Hub, set the registry to `docker.io` and the repository to
+`<namespace>/<name>`:
+
+```bash
+CI_CONTAINER_REGISTRY=docker.io
+CI_CONTAINER_REGISTRY_REPO=myorg/clp-plugin-presto-connector
+```
+
+That publishes `docker.io/myorg/clp-plugin-presto-connector:<version>` and
+`docker.io/myorg/clp-plugin-presto-connector:env-<hash>`. Build-env images from
+before this layout sat at `<repo>/build-env:env-<hash>` and are no longer read,
+so the first build afterwards rebuilds the image once; the old tags can be
+deleted.
 
 Build state is cached under `.cache/` (`maven/`, `ccache/`,
 `fetchcontent/<hash>/`, and `build/<hash>/` for persisted CMake/build state),

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Resolves this repo's dependency-image reference for local builds.
-# Checks local Docker first, then GHCR, then builds a host-arch image.
+# Checks local Docker first, then the container registry, then builds a host-arch image.
 #
 # Prints the resolved image reference to stdout.
 #
@@ -32,8 +32,8 @@ main() {
 
     echo >&2 "==> Deriving build-env hash..."
     build_env_hash="$(derive_build_env_hash)"
-    image_repo="$(image_repo_from_origin)"
-    image="$(image_ref "${image_repo}" "build-env" "${build_env_hash}")"
+    image_repo="$(resolve_image_repo)"
+    image="$(image_ref "${image_repo}" "${build_env_hash}")"
     platform="$(host_platform)"
 
     echo >&2 "    build-env hash: ${build_env_hash}"

@@ -36,11 +36,18 @@ jobs:
     permissions:
       # To check out the repository.
       contents: "read"
+      # To pull the build-env image.
+      packages: "read"
     env:
       # A machine can run more than one job at a time, so two runs would otherwise share container
       # names and compete for the same host port.
       COMPOSE_PROJECT_NAME: "clp-it-${{github.run_id}}-${{github.run_attempt}}"
       CLP_INTEGRATION_TEST_COORDINATOR_PORT: "0"
+      # The GitHub token only authenticates to GHCR. The credential fallback below applies only
+      # while this variable is unset or `ghcr.io`: set the username/password secrets with any
+      # other registry.
+      CI_CONTAINER_REGISTRY: "${{vars.CI_CONTAINER_REGISTRY}}"
+      CI_CONTAINER_REGISTRY_REPO: "${{vars.CI_CONTAINER_REGISTRY_REPO}}"
     steps:
       - name: "Check out repository"
         uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"  # v7.0.0
@@ -55,6 +62,24 @@ jobs:
       - uses: "./tools/yscope-dev-utils/exports/github/actions/install-uv"
         with:
           version: "0.11.3"
+
+      # Packaging pulls the build-env image, and falls back to rebuilding it from scratch when the
+      # pull fails, so an unauthenticated registry costs half an hour rather than an error.
+      - name: "Log in to the container registry"
+        # A pull request from a fork cannot read the secrets, and logging in with the GitHub token
+        # fails against any other registry. Losing the pull only costs a rebuild, so do not fail.
+        continue-on-error: true
+        uses: "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0"  # v4.4.0
+        with:
+          registry: "${{vars.CI_CONTAINER_REGISTRY || 'ghcr.io'}}"
+          username: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_USERNAME
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && github.actor) || ''}}
+          password: >-
+            ${{secrets.CI_CONTAINER_REGISTRY_PASSWORD
+            || ((vars.CI_CONTAINER_REGISTRY == '' || vars.CI_CONTAINER_REGISTRY == 'ghcr.io')
+            && secrets.GITHUB_TOKEN) || ''}}
 
       # Separate steps rather than `integration-tests:run`, so the logs can be captured while the
       # cluster is still up.
