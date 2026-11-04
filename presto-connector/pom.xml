@@ -69,6 +69,7 @@
     <resources.plugin.version>3.5.0</resources.plugin.version>
     <shade.plugin.version>3.6.2</shade.plugin.version>
     <site.plugin.version>3.21.0</site.plugin.version>
+    <spotless.plugin.version>3.5.1</spotless.plugin.version>
     <surefire.plugin.version>3.5.5</surefire.plugin.version>
   </properties>
 
@@ -285,6 +286,11 @@
           <artifactId>maven-surefire-plugin</artifactId>
           <version>${surefire.plugin.version}</version>
         </plugin>
+        <plugin>
+          <groupId>com.diffplug.spotless</groupId>
+          <artifactId>spotless-maven-plugin</artifactId>
+          <version>${spotless.plugin.version}</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -292,7 +298,30 @@
       <!-- Maven processes plugins
       a) in the order of the phases in the lifecycle, and
       b) in order of appearance within each phase.
-      When configuring plugins below, we do our best to order and group by lifecycle phases. --> 
+      When configuring plugins below, we do our best to order and group by lifecycle phases. -->
+
+      <!-- No phase -->
+      <plugin>
+        <groupId>com.diffplug.spotless</groupId>
+        <artifactId>spotless-maven-plugin</artifactId>
+        <configuration>
+          <java>
+            <!-- Unlike the other steps here, CleanThat rewrites code rather than reformatting
+                 it. It applies CleanThat's default `SafeAndConsensual` mutators, which modernize
+                 constructs without changing behavior (e.g. `values.size() == 0` becomes
+                 `values.isEmpty()`). Dropping this step would leave formatting untouched but
+                 stop those rewrites. -->
+            <cleanthat/>
+            <eclipse>
+              <file>.eclipse-formatter.xml</file>
+            </eclipse>
+            <importOrder>
+              <order>java|javax,,com.facebook.presto.plugin.clp</order>
+            </importOrder>
+            <removeUnusedImports/>
+          </java>
+        </configuration>
+      </plugin>
 
       <!-- phase:package -->
       <!-- Bundle all dependencies into a single fat JAR for deployment. -->

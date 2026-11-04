@@ -1,5 +1,8 @@
 version: "3"
 
+includes:
+  lint: "lint.yaml"
+
 tasks:
   clean:
     cmd: "./mvnw clean"

@@ -16,6 +16,15 @@ tasks:
     cmds:
       - task: "fix-py"
       - task: "fix-yaml"
+      - task: "fix-java"
+
+  check-java:
+    cmds:
+      - task: ":presto-connector:lint:check-java"
+
+  fix-java:
+    cmds:
+      - task: ":presto-connector:lint:fix-java"
 
   check-py:
     cmds:

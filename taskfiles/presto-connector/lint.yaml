@@ -1,0 +1,8 @@
+version: "3"
+
+tasks:
+  check-java:
+    cmd: "./mvnw spotless:check"
+
+  fix-java:
+    cmd: "./mvnw spotless:apply"
