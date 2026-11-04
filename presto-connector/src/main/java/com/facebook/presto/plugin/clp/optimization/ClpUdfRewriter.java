@@ -2,9 +2,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -13,7 +11,18 @@
  */
 package com.facebook.presto.plugin.clp.optimization;
 
-import com.facebook.presto.plugin.clp.ClpColumnHandle;
+import static com.facebook.presto.plugin.clp.ClpErrorCode.CLP_PUSHDOWN_UNSUPPORTED_EXPRESSION;
+import static com.facebook.presto.spi.ConnectorPlanRewriter.rewriteWith;
+import static com.google.common.collect.ImmutableList.toImmutableList;
+import static java.util.Objects.requireNonNull;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ConnectorPlanOptimizer;
 import com.facebook.presto.spi.ConnectorPlanRewriter;
@@ -34,17 +43,7 @@ import com.facebook.presto.spi.relation.SpecialFormExpression;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import io.airlift.slice.Slice;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import static com.facebook.presto.plugin.clp.ClpErrorCode.CLP_PUSHDOWN_UNSUPPORTED_EXPRESSION;
-import static com.facebook.presto.spi.ConnectorPlanRewriter.rewriteWith;
-import static com.google.common.collect.ImmutableList.toImmutableList;
-import static java.util.Objects.requireNonNull;
+import com.facebook.presto.plugin.clp.ClpColumnHandle;
 
 /**
  * Utility for rewriting CLP UDFs (e.g., <code>CLP_GET_*</code>) in {@link RowExpression} trees.
@@ -55,21 +54,25 @@ import static java.util.Objects.requireNonNull;
  * This enables querying fields that are not part of the original table schema but are available
  * in CLP.
  */
-public final class ClpUdfRewriter
-        implements ConnectorPlanOptimizer
-{
+public final class ClpUdfRewriter implements ConnectorPlanOptimizer {
     public static final String JSON_STRING_PLACEHOLDER = "__json_string";
     private final FunctionMetadataManager functionManager;
 
-    public ClpUdfRewriter(FunctionMetadataManager functionManager)
-    {
+    public ClpUdfRewriter(FunctionMetadataManager functionManager) {
         this.functionManager = requireNonNull(functionManager, "functionManager is null");
     }
 
     @Override
-    public PlanNode optimize(PlanNode maxSubplan, ConnectorSession session, VariableAllocator allocator, PlanNodeIdAllocator idAllocator)
-    {
-        return rewriteWith(new Rewriter(idAllocator, allocator, collectExistingScanAssignments(maxSubplan)), maxSubplan);
+    public PlanNode optimize(
+            PlanNode maxSubplan,
+            ConnectorSession session,
+            VariableAllocator allocator,
+            PlanNodeIdAllocator idAllocator
+    ) {
+        return rewriteWith(
+                new Rewriter(idAllocator, allocator, collectExistingScanAssignments(maxSubplan)),
+                maxSubplan
+        );
     }
 
     /**
@@ -87,12 +90,13 @@ public final class ClpUdfRewriter
      * @param root the root {@link PlanNode} of the plan subtree
      * @return a map from column handle to its correh hsponding scan-level variable
      */
-    private Map<ColumnHandle, VariableReferenceExpression> collectExistingScanAssignments(PlanNode root)
-    {
+    private Map<ColumnHandle, VariableReferenceExpression> collectExistingScanAssignments(
+            PlanNode root
+    ) {
         Map<ColumnHandle, VariableReferenceExpression> map = new HashMap<>();
         root.getSources().forEach(source -> map.putAll(collectExistingScanAssignments(source)));
         if (root instanceof TableScanNode) {
-            TableScanNode scan = (TableScanNode) root;
+            TableScanNode scan = (TableScanNode)root;
             scan.getAssignments().forEach((var, handle) -> {
                 map.putIfAbsent(handle, var);
             });
@@ -100,9 +104,7 @@ public final class ClpUdfRewriter
         return map;
     }
 
-    private class Rewriter
-            extends ConnectorPlanRewriter<Void>
-    {
+    private class Rewriter extends ConnectorPlanRewriter<Void> {
         private final PlanNodeIdAllocator idAllocator;
         private final VariableAllocator variableAllocator;
         private final Map<ColumnHandle, VariableReferenceExpression> globalColumnVarMap;
@@ -110,40 +112,61 @@ public final class ClpUdfRewriter
         public Rewriter(
                 PlanNodeIdAllocator idAllocator,
                 VariableAllocator variableAllocator,
-                Map<ColumnHandle, VariableReferenceExpression> globalColumnVarMap)
-        {
+                Map<ColumnHandle, VariableReferenceExpression> globalColumnVarMap
+        ) {
             this.idAllocator = idAllocator;
             this.variableAllocator = variableAllocator;
             this.globalColumnVarMap = globalColumnVarMap;
         }
 
         @Override
-        public PlanNode visitProject(ProjectNode node, RewriteContext<Void> context)
-        {
+        public PlanNode visitProject(ProjectNode node, RewriteContext<Void> context) {
             Assignments.Builder newAssignments = Assignments.builder();
-            for (Map.Entry<VariableReferenceExpression, RowExpression> entry : node.getAssignments().getMap().entrySet()) {
+            for (
+                Map.Entry<VariableReferenceExpression, RowExpression> entry : node.getAssignments()
+                        .getMap().entrySet()
+            ) {
                 newAssignments.put(
                         entry.getKey(),
-                        rewriteClpUdfs(entry.getValue(), functionManager, variableAllocator, true));
+                        rewriteClpUdfs(entry.getValue(), functionManager, variableAllocator, true)
+                );
             }
 
             PlanNode newSource = node.getSource().accept(this, context);
-            return new ProjectNode(node.getSourceLocation(), idAllocator.getNextId(), newSource, newAssignments.build(), node.getLocality());
+            return new ProjectNode(
+                    node.getSourceLocation(),
+                    idAllocator.getNextId(),
+                    newSource,
+                    newAssignments.build(),
+                    node.getLocality()
+            );
         }
 
         @Override
-        public PlanNode visitFilter(FilterNode node, RewriteContext<Void> context)
-        {
-            RowExpression newPredicate = rewriteClpUdfs(node.getPredicate(), functionManager, variableAllocator, false);
+        public PlanNode visitFilter(FilterNode node, RewriteContext<Void> context) {
+            RowExpression newPredicate = rewriteClpUdfs(
+                    node.getPredicate(),
+                    functionManager,
+                    variableAllocator,
+                    false
+            );
             PlanNode newSource = node.getSource().accept(this, context);
-            return new FilterNode(node.getSourceLocation(), idAllocator.getNextId(), newSource, newPredicate);
+            return new FilterNode(
+                    node.getSourceLocation(),
+                    idAllocator.getNextId(),
+                    newSource,
+                    newPredicate
+            );
         }
 
         @Override
-        public PlanNode visitTableScan(TableScanNode node, RewriteContext<Void> context)
-        {
-            Set<VariableReferenceExpression> outputVars = new LinkedHashSet<>(node.getOutputVariables());
-            Map<VariableReferenceExpression, ColumnHandle> newAssignments = new HashMap<>(node.getAssignments());
+        public PlanNode visitTableScan(TableScanNode node, RewriteContext<Void> context) {
+            Set<VariableReferenceExpression> outputVars = new LinkedHashSet<>(
+                    node.getOutputVariables()
+            );
+            Map<VariableReferenceExpression, ColumnHandle> newAssignments = new HashMap<>(
+                    node.getAssignments()
+            );
 
             // Add any missing variables for known handles
             globalColumnVarMap.forEach((handle, var) -> {
@@ -160,7 +183,8 @@ public final class ClpUdfRewriter
                     node.getTableConstraints(),
                     node.getCurrentConstraint(),
                     node.getEnforcedConstraint(),
-                    node.getCteMaterializationInfo());
+                    node.getCteMaterializationInfo()
+            );
         }
 
         /**
@@ -183,64 +207,93 @@ public final class ClpUdfRewriter
                 RowExpression expression,
                 FunctionMetadataManager functionManager,
                 VariableAllocator variableAllocator,
-                boolean inProjectNode)
-        {
+                boolean inProjectNode
+        ) {
             // Handle CLP_GET_* function calls
             if (expression instanceof CallExpression) {
-                CallExpression call = (CallExpression) expression;
-                String functionName = functionManager.getFunctionMetadata(call.getFunctionHandle()).getName().getObjectName().toUpperCase();
+                CallExpression call = (CallExpression)expression;
+                String functionName = functionManager.getFunctionMetadata(call.getFunctionHandle())
+                        .getName().getObjectName().toUpperCase();
 
                 if (inProjectNode && functionName.equals("CLP_GET_JSON_STRING")) {
                     VariableReferenceExpression newValue = variableAllocator.newVariable(
                             expression.getSourceLocation(),
                             JSON_STRING_PLACEHOLDER,
-                            call.getType());
-                    ClpColumnHandle targetHandle = new ClpColumnHandle(JSON_STRING_PLACEHOLDER, call.getType());
+                            call.getType()
+                    );
+                    ClpColumnHandle targetHandle = new ClpColumnHandle(
+                            JSON_STRING_PLACEHOLDER,
+                            call.getType()
+                    );
 
                     globalColumnVarMap.put(targetHandle, newValue);
                     return newValue;
-                }
-                else if (functionName.startsWith("CLP_GET_")) {
-                    if (call.getArguments().size() != 1 || !(call.getArguments().get(0) instanceof ConstantExpression)) {
-                        throw new PrestoException(CLP_PUSHDOWN_UNSUPPORTED_EXPRESSION,
-                                "CLP_GET_* UDF must have a single constant string argument");
+                } else if (functionName.startsWith("CLP_GET_")) {
+                    if (
+                        call.getArguments().size() != 1 || !(call.getArguments().get(
+                                0
+                        ) instanceof ConstantExpression)
+                    ) {
+                        throw new PrestoException(
+                                CLP_PUSHDOWN_UNSUPPORTED_EXPRESSION,
+                                "CLP_GET_* UDF must have a single constant string argument"
+                        );
                     }
 
-                    ConstantExpression constant = (ConstantExpression) call.getArguments().get(0);
-                    String jsonPath = ((Slice) constant.getValue()).toStringUtf8();
+                    ConstantExpression constant = (ConstantExpression)call.getArguments().get(0);
+                    String jsonPath = ((Slice)constant.getValue()).toStringUtf8();
                     ClpColumnHandle targetHandle = new ClpColumnHandle(jsonPath, call.getType());
 
                     // Check if a variable with the same ClpColumnHandle already exists
                     VariableReferenceExpression existingVar = globalColumnVarMap.get(targetHandle);
-                    if (existingVar != null) {
-                        return existingVar;
-                    }
+                    if (existingVar != null) { return existingVar; }
 
                     VariableReferenceExpression newVar = variableAllocator.newVariable(
                             expression.getSourceLocation(),
                             encodeJsonPath(jsonPath),
-                            call.getType());
+                            call.getType()
+                    );
                     globalColumnVarMap.put(targetHandle, newVar);
                     return newVar;
                 }
 
                 // Recurse into arguments
-                List<RowExpression> rewrittenArgs = call.getArguments().stream()
-                        .map(arg -> rewriteClpUdfs(arg, functionManager, variableAllocator, inProjectNode))
-                        .collect(toImmutableList());
+                List<RowExpression> rewrittenArgs = call.getArguments().stream().map(
+                        arg -> rewriteClpUdfs(
+                                arg,
+                                functionManager,
+                                variableAllocator,
+                                inProjectNode
+                        )
+                ).collect(toImmutableList());
 
-                return new CallExpression(call.getDisplayName(), call.getFunctionHandle(), call.getType(), rewrittenArgs);
+                return new CallExpression(
+                        call.getDisplayName(),
+                        call.getFunctionHandle(),
+                        call.getType(),
+                        rewrittenArgs
+                );
             }
 
             // Handle special forms (e.g., AND, OR, etc.)
             if (expression instanceof SpecialFormExpression) {
-                SpecialFormExpression special = (SpecialFormExpression) expression;
+                SpecialFormExpression special = (SpecialFormExpression)expression;
 
-                List<RowExpression> rewrittenArgs = special.getArguments().stream()
-                        .map(arg -> rewriteClpUdfs(arg, functionManager, variableAllocator, inProjectNode))
-                        .collect(toImmutableList());
+                List<RowExpression> rewrittenArgs = special.getArguments().stream().map(
+                        arg -> rewriteClpUdfs(
+                                arg,
+                                functionManager,
+                                variableAllocator,
+                                inProjectNode
+                        )
+                ).collect(toImmutableList());
 
-                return new SpecialFormExpression(special.getSourceLocation(), special.getForm(), special.getType(), rewrittenArgs);
+                return new SpecialFormExpression(
+                        special.getSourceLocation(),
+                        special.getForm(),
+                        special.getType(),
+                        rewrittenArgs
+                );
             }
 
             return expression;
@@ -256,20 +309,16 @@ public final class ClpUdfRewriter
          * @param jsonPath the JSON path to encode
          * @return the encoded variable name
          */
-        private String encodeJsonPath(String jsonPath)
-        {
+        private String encodeJsonPath(String jsonPath) {
             StringBuilder sb = new StringBuilder();
             for (char c : jsonPath.toCharArray()) {
                 if (Character.isUpperCase(c)) {
                     sb.append("_ux").append(Character.toLowerCase(c));
-                }
-                else if (c == '.') {
+                } else if (c == '.') {
                     sb.append("_dot_");
-                }
-                else if (c == '_') {
+                } else if (c == '_') {
                     sb.append("_und_");
-                }
-                else {
+                } else {
                     sb.append(c);
                 }
             }

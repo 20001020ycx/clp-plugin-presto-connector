@@ -34,10 +34,12 @@ task lint:fix
 The commands above run all linting checks, but for performance you may want to run a subset using
 one of the tasks in the table below.
 
-| Task               | Description                              |
-|--------------------|------------------------------------------|
-| `lint:check-yaml`  | Runs the YAML linters.                   |
-| `lint:fix-yaml`    | Runs the YAML linters and fixes issues.  |
+| Task               | Description                                          |
+|--------------------|------------------------------------------------------|
+| `lint:check-java`  | Runs the Java linters (Spotless and SpotBugs).       |
+| `lint:fix-java`    | Runs Spotless and fixes formatting issues.           |
+| `lint:check-yaml`  | Runs the YAML linters.                               |
+| `lint:fix-yaml`    | Runs the YAML linters and fixes issues.              |
 
 ## Testing
 

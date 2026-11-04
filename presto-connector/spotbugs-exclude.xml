@@ -1,0 +1,34 @@
+<FindBugsFilter>
+  <Match>
+    <Bug category="BAD_PRACTICE" pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
+    <Class name="com.facebook.presto.plugin.clp.ClpColumnHandle" />
+    <Justification>False positive: Presto SPI Type class is immutable, caller won't mutate it.</Justification>
+  </Match>
+
+  <Match>
+    <Bug category="SECURITY" pattern="DMI_EMPTY_DB_PASSWORD" />
+    <Class name="com.facebook.presto.plugin.clp.ClpMetadataDbSetUp" />
+    <Justification>False positive: Testing database intentionally uses empty password, no security breach.</Justification>
+  </Match>
+
+  <!-- TODO: These are valid SpotBugs findings that will be fixed in a future PR. -->
+  <Match>
+    <Bug category="BAD_PRACTICE" pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2" />
+    <Class name="~com\.facebook\.presto\.plugin\.clp\.mockdb\..*" />
+  </Match>
+
+  <Match>
+    <Bug category="BAD_PRACTICE" pattern="CT_CONSTRUCTOR_THROW" />
+    <Class name="~com\.facebook\.presto\.plugin\.clp\.(metadata\.ClpMySqlMetadataProvider|split\.ClpMySqlSplitProvider|split\.filter\.ClpSplitFilterProvider)" />
+  </Match>
+
+  <Match>
+    <Bug category="BAD_PRACTICE" pattern="ODR_OPEN_DATABASE_RESOURCE" />
+    <Class name="~com\.facebook\.presto\.plugin\.clp\.(metadata\.ClpMySqlMetadataProvider|split\.ClpMySqlSplitProvider)" />
+  </Match>
+
+  <Match>
+    <Bug pattern="OBL_UNSATISFIED_OBLIGATION" />
+    <Class name="~com\.facebook\.presto\.plugin\.clp\.(metadata\.ClpMySqlMetadataProvider|split\.ClpMySqlSplitProvider)" />
+  </Match>
+</FindBugsFilter>

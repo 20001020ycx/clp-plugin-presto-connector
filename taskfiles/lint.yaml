@@ -8,6 +8,7 @@ tasks:
     cmds:
       - task: "check-py"
       - task: "check-yaml"
+      - task: "check-java"
 
   clean:
     cmd: "rm -rf '{{.G_LINT_VENV_DIR}}'"
@@ -16,6 +17,15 @@ tasks:
     cmds:
       - task: "fix-py"
       - task: "fix-yaml"
+      - task: "fix-java"
+
+  check-java:
+    cmds:
+      - task: ":presto-connector:lint:check-java"
+
+  fix-java:
+    cmds:
+      - task: ":presto-connector:lint:fix-java"
 
   check-py:
     cmds:
