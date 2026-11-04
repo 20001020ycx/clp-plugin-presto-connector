@@ -2,9 +2,7 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -12,6 +10,25 @@
  * limitations under the License.
  */
 package com.facebook.presto.plugin.clp;
+
+import static com.facebook.presto.common.type.BigintType.BIGINT;
+import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
+import static com.facebook.presto.common.type.DoubleType.DOUBLE;
+import static com.facebook.presto.common.type.TimestampType.TIMESTAMP;
+import static com.facebook.presto.common.type.VarcharType.VARCHAR;
+import static com.facebook.presto.metadata.FunctionAndTypeManager.createTestFunctionAndTypeManager;
+import static com.facebook.presto.metadata.SessionPropertyManager.createTestingSessionPropertyManager;
+import static com.facebook.presto.spi.WarningCollector.NOOP;
+import static com.facebook.presto.sql.ExpressionUtils.rewriteIdentifiersToSymbolReferences;
+import static com.facebook.presto.sql.analyzer.ExpressionAnalyzer.getExpressionTypes;
+import static com.facebook.presto.sql.parser.ParsingOptions.DecimalLiteralTreatment.AS_DECIMAL;
+import static com.facebook.presto.testing.TestingConnectorSession.SESSION;
+import static com.facebook.presto.transaction.InMemoryTransactionManager.createTestTransactionManager;
+import static java.util.stream.Collectors.toMap;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 import com.facebook.presto.Session;
 import com.facebook.presto.SystemSessionProperties;
@@ -46,32 +63,16 @@ import com.facebook.presto.testing.TestingSession;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
-import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Stream;
-
-import static com.facebook.presto.common.type.BigintType.BIGINT;
-import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
-import static com.facebook.presto.common.type.DoubleType.DOUBLE;
-import static com.facebook.presto.common.type.TimestampType.TIMESTAMP;
-import static com.facebook.presto.common.type.VarcharType.VARCHAR;
-import static com.facebook.presto.metadata.FunctionAndTypeManager.createTestFunctionAndTypeManager;
-import static com.facebook.presto.metadata.SessionPropertyManager.createTestingSessionPropertyManager;
-import static com.facebook.presto.spi.WarningCollector.NOOP;
-import static com.facebook.presto.sql.ExpressionUtils.rewriteIdentifiersToSymbolReferences;
-import static com.facebook.presto.sql.analyzer.ExpressionAnalyzer.getExpressionTypes;
-import static com.facebook.presto.sql.parser.ParsingOptions.DecimalLiteralTreatment.AS_DECIMAL;
-import static com.facebook.presto.testing.TestingConnectorSession.SESSION;
-import static com.facebook.presto.transaction.InMemoryTransactionManager.createTestTransactionManager;
-import static java.util.stream.Collectors.toMap;
-
-public class TestClpQueryBase
-{
-    protected static final FunctionAndTypeManager functionAndTypeManager = createTestFunctionAndTypeManager();
+public class TestClpQueryBase {
+    protected static final FunctionAndTypeManager functionAndTypeManager
+            = createTestFunctionAndTypeManager();
     static {
-        functionAndTypeManager.registerBuiltInFunctions(FunctionExtractor.extractFunctions(ClpFunctions.class));
+        functionAndTypeManager.registerBuiltInFunctions(
+                FunctionExtractor.extractFunctions(ClpFunctions.class)
+        );
     }
-    protected static final StandardFunctionResolution standardFunctionResolution = new FunctionResolution(functionAndTypeManager.getFunctionAndTypeResolver());
+    protected static final StandardFunctionResolution standardFunctionResolution
+            = new FunctionResolution(functionAndTypeManager.getFunctionAndTypeResolver());
     protected static final Metadata metadata = new MetadataManager(
             functionAndTypeManager,
             new BlockEncodingManager(),
@@ -81,34 +82,65 @@ public class TestClpQueryBase
             new MaterializedViewPropertyManager(),
             new ColumnPropertyManager(),
             new AnalyzePropertyManager(),
-            createTestTransactionManager(new CatalogManager()));
+            createTestTransactionManager(new CatalogManager())
+    );
 
-    protected static final ClpTableHandle table = new ClpTableHandle(new SchemaTableName("default", "test"), "");
+    protected static final ClpTableHandle table = new ClpTableHandle(
+            new SchemaTableName("default", "test"),
+            ""
+    );
     protected static final ClpColumnHandle city = new ClpColumnHandle(
             "city",
-            RowType.from(ImmutableList.of(
-                    RowType.field("Name", VARCHAR),
-                    RowType.field("Region", RowType.from(ImmutableList.of(
-                            RowType.field("Id", BIGINT),
-                            RowType.field("Name", VARCHAR)))))));
+            RowType.from(
+                    ImmutableList.of(
+                            RowType.field("Name", VARCHAR),
+                            RowType.field(
+                                    "Region",
+                                    RowType.from(
+                                            ImmutableList.of(
+                                                    RowType.field("Id", BIGINT),
+                                                    RowType.field("Name", VARCHAR)
+                                            )
+                                    )
+                            )
+                    )
+            )
+    );
     protected static final ClpColumnHandle fare = new ClpColumnHandle("fare", DOUBLE);
     protected static final ClpColumnHandle isHoliday = new ClpColumnHandle("isHoliday", BOOLEAN);
-    protected static final ClpColumnHandle clpTimestamp = new ClpColumnHandle("clpTimestamp", TIMESTAMP);
-    protected static final Map<VariableReferenceExpression, ColumnHandle> variableToColumnHandleMap =
-            Stream.of(city, fare, isHoliday, clpTimestamp)
-                    .collect(toMap(
-                            ch -> new VariableReferenceExpression(Optional.empty(), ch.getColumnName(), ch.getColumnType()),
-                            ch -> ch));
-    protected final TypeProvider typeProvider = TypeProvider.fromVariables(variableToColumnHandleMap.keySet());
+    protected static final ClpColumnHandle clpTimestamp = new ClpColumnHandle(
+            "clpTimestamp",
+            TIMESTAMP
+    );
+    protected static final Map<VariableReferenceExpression, ColumnHandle> variableToColumnHandleMap
+            = Stream.of(city, fare, isHoliday, clpTimestamp).collect(
+                    toMap(
+                            ch -> new VariableReferenceExpression(
+                                    Optional.empty(),
+                                    ch.getColumnName(),
+                                    ch.getColumnType()
+                            ),
+                            ch -> ch
+                    )
+            );
+    protected final TypeProvider typeProvider = TypeProvider.fromVariables(
+            variableToColumnHandleMap.keySet()
+    );
 
-    public static Expression expression(String sql)
-    {
+    public static Expression expression(String sql) {
         return rewriteIdentifiersToSymbolReferences(
-                new SqlParser().createExpression(sql, ParsingOptions.builder().setDecimalLiteralTreatment(AS_DECIMAL).build()));
+                new SqlParser().createExpression(
+                        sql,
+                        ParsingOptions.builder().setDecimalLiteralTreatment(AS_DECIMAL).build()
+                )
+        );
     }
 
-    protected RowExpression toRowExpression(Expression expression, TypeProvider typeProvider, Session session)
-    {
+    protected RowExpression toRowExpression(
+            Expression expression,
+            TypeProvider typeProvider,
+            Session session
+    ) {
         Map<NodeRef<Expression>, Type> expressionTypes = getExpressionTypes(
                 session,
                 metadata,
@@ -116,24 +148,32 @@ public class TestClpQueryBase
                 typeProvider,
                 expression,
                 ImmutableMap.of(),
-                NOOP);
-        return SqlToRowExpressionTranslator.translate(expression, expressionTypes, ImmutableMap.of(), functionAndTypeManager, session);
+                NOOP
+        );
+        return SqlToRowExpressionTranslator.translate(
+                expression,
+                expressionTypes,
+                ImmutableMap.of(),
+                functionAndTypeManager,
+                session
+        );
     }
 
-    protected RowExpression getRowExpression(String sqlExpression, SessionHolder sessionHolder)
-    {
+    protected RowExpression getRowExpression(String sqlExpression, SessionHolder sessionHolder) {
         return toRowExpression(expression(sqlExpression), typeProvider, sessionHolder.getSession());
     }
 
-    protected static class SessionHolder
-    {
+    protected static class SessionHolder {
         private final ConnectorSession connectorSession;
         private final Session session;
 
-        public SessionHolder()
-        {
+        public SessionHolder() {
             connectorSession = SESSION;
-            session = TestingSession.testSessionBuilder(createTestingSessionPropertyManager(new SystemSessionProperties().getSessionProperties())).build();
+            session = TestingSession.testSessionBuilder(
+                    createTestingSessionPropertyManager(
+                            new SystemSessionProperties().getSessionProperties()
+                    )
+            ).build();
         }
 
         /**
@@ -143,22 +183,17 @@ public class TestClpQueryBase
          * Without pinning the timezone, the same literal produces different epoch-ms values on
          * machines in different timezones, causing the assertions to fail.
          */
-        public SessionHolder(TimeZoneKey timeZoneKey)
-        {
+        public SessionHolder(TimeZoneKey timeZoneKey) {
             connectorSession = SESSION;
-            session = TestingSession.testSessionBuilder(createTestingSessionPropertyManager(new SystemSessionProperties().getSessionProperties()))
-                    .setTimeZoneKey(timeZoneKey)
-                    .build();
+            session = TestingSession.testSessionBuilder(
+                    createTestingSessionPropertyManager(
+                            new SystemSessionProperties().getSessionProperties()
+                    )
+            ).setTimeZoneKey(timeZoneKey).build();
         }
 
-        public ConnectorSession getConnectorSession()
-        {
-            return connectorSession;
-        }
+        public ConnectorSession getConnectorSession() { return connectorSession; }
 
-        public Session getSession()
-        {
-            return session;
-        }
+        public Session getSession() { return session; }
     }
 }

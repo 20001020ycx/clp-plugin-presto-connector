@@ -8,6 +8,7 @@ tasks:
     cmds:
       - task: "check-py"
       - task: "check-yaml"
+      - task: "check-java"
 
   clean:
     cmd: "rm -rf '{{.G_LINT_VENV_DIR}}'"

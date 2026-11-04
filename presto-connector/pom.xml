@@ -300,7 +300,7 @@
       b) in order of appearance within each phase.
       When configuring plugins below, we do our best to order and group by lifecycle phases. -->
 
-      <!-- No phase -->
+      <!-- phase:validate -->
       <plugin>
         <groupId>com.diffplug.spotless</groupId>
         <artifactId>spotless-maven-plugin</artifactId>
@@ -321,6 +321,15 @@
             <removeUnusedImports/>
           </java>
         </configuration>
+        <executions>
+          <execution>
+            <!-- spotless:check's default binding is verify; run it up front instead. -->
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
 
       <!-- phase:package -->
