@@ -36,7 +36,7 @@ one of the tasks in the table below.
 
 | Task               | Description                                          |
 |--------------------|------------------------------------------------------|
-| `lint:check-java`  | Runs the Java formatting check (Spotless).           |
+| `lint:check-java`  | Runs the Java linters (Spotless and SpotBugs).       |
 | `lint:fix-java`    | Runs Spotless and fixes formatting issues.           |
 | `lint:check-yaml`  | Runs the YAML linters.                               |
 | `lint:fix-yaml`    | Runs the YAML linters and fixes issues.              |

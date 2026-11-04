@@ -69,6 +69,7 @@
     <resources.plugin.version>3.5.0</resources.plugin.version>
     <shade.plugin.version>3.6.2</shade.plugin.version>
     <site.plugin.version>3.21.0</site.plugin.version>
+    <spotbugs.plugin.version>4.9.8.3</spotbugs.plugin.version>
     <spotless.plugin.version>3.5.1</spotless.plugin.version>
     <surefire.plugin.version>3.5.5</surefire.plugin.version>
   </properties>
@@ -291,6 +292,11 @@
           <artifactId>spotless-maven-plugin</artifactId>
           <version>${spotless.plugin.version}</version>
         </plugin>
+        <plugin>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
+          <version>${spotbugs.plugin.version}</version>
+        </plugin>
       </plugins>
     </pluginManagement>
 
@@ -299,6 +305,18 @@
       a) in the order of the phases in the lifecycle, and
       b) in order of appearance within each phase.
       When configuring plugins below, we do our best to order and group by lifecycle phases. -->
+
+      <!-- No phase -->
+      <plugin>
+        <groupId>com.github.spotbugs</groupId>
+        <artifactId>spotbugs-maven-plugin</artifactId>
+        <configuration>
+          <effort>Max</effort>
+          <includeTests>true</includeTests>
+          <excludeFilterFile>${project.basedir}/spotbugs-exclude.xml</excludeFilterFile>
+          <userPrefs>${project.basedir}/spotbugs-prefs.properties</userPrefs>
+        </configuration>
+      </plugin>
 
       <!-- phase:validate -->
       <plugin>

@@ -2,7 +2,10 @@ version: "3"
 
 tasks:
   check-java:
-    cmd: "./mvnw spotless:check"
+    deps: [":presto-connector:install-presto-artifacts-with-tests"]
+    cmds:
+      - "./mvnw spotless:check"
+      - "./mvnw compile test-compile spotbugs:check"
 
   fix-java:
     cmd: "./mvnw spotless:apply"
