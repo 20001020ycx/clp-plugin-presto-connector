@@ -4,10 +4,14 @@
 # The plugin's data path exists only in the native worker, so the coordinator is configured with
 # `node-scheduler.include-coordinator=false` and every read is served by the worker.
 #
-# Archives are served straight off the filesystem by the connector's `INTEGRATION_TEST` metadata
-# and split providers, so no metadata database is needed. The fixture directory is mounted at the
-# SAME path in both services: the coordinator enumerates archives to build splits, and the worker
-# opens the paths that those splits carry.
+# The connector's `INTEGRATION_TEST` metadata and split providers stand in for the metadata
+# database that a real deployment queries, discovering archives by listing a directory. Both
+# catalogs therefore need the fixture tree on the coordinator, whatever the worker reads from.
+#
+# Both use a RELATIVE archive dir, so the split paths that they hand the worker are relative too.
+# Each process resolves them against its own working directory: the coordinator lists them under
+# node.data-dir, the `clp` worker opens them under `/`, and the `clp_s3` worker joins them onto
+# the MinIO endpoint instead. That is why the mounts below sit at different paths.
 #
 # The plugins are installed by the same init-container image that a real deployment uses, which
 # `task package` builds. Each install service writes into a volume, and the corresponding node then
@@ -21,11 +25,45 @@ x-installer: &installer
   # does not leave compose looking for an image nobody built.
   image: "${CLP_PLUGIN_INSTALLER_IMAGE:-${CI_CONTAINER_REGISTRY:-ghcr.io}/${CI_CONTAINER_REGISTRY_REPO:-y-scope/clp-plugin-presto-connector}:0.1.0-SNAPSHOT}"
 
+# MinIO no longer publishes `minio/minio` or `minio/mc`. This image is the upstream Dockerfile built
+# from the same release tag and carries both the server and `mc`, so the seeding service uses it too.
+x-minio-image: &minio-image "coollabsio/minio:RELEASE.2025-04-22T22-12-26Z@sha256:a4938f37f1be1841b8e7b627ad0207b265345fd0d063e42d7410c78af0e63e68"
+
 volumes:
   coordinator-plugin:
   worker-plugin:
 
 services:
+  minio:
+    image: *minio-image
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: "minioadmin"
+      MINIO_ROOT_PASSWORD: "minioadmin"
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: "3s"
+      timeout: "3s"
+      retries: 30
+
+  # Seeds the fixture tree into a bucket named `fixtures`, keyed `<table>/<archive>`. Split paths
+  # are therefore `fixtures/<table>/<archive>`, carrying the bucket themselves, which is why no
+  # catalog configures one.
+  seed-fixtures:
+    image: *minio-image
+    depends_on:
+      minio:
+        condition: "service_healthy"
+    volumes:
+      - "${CLP_INTEGRATION_TEST_FIXTURE_DIR:-./fixtures}:/fixtures:ro"
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        mc alias set local http://minio:9000 minioadmin minioadmin
+        mc mb --ignore-existing local/fixtures
+        mc cp --recursive /fixtures/ local/fixtures/
+
   install-coordinator-plugin:
     <<: *installer
     environment:
@@ -48,7 +86,9 @@ services:
     volumes:
       - "coordinator-plugin:/opt/presto-server/plugin/clp:ro"
       - "./etc/coordinator:/opt/presto-server/etc:ro"
-      - "${CLP_INTEGRATION_TEST_FIXTURE_DIR:-./fixtures}:/fixtures:ro"
+      # Under the working directory, which the launcher sets to node.data-dir, so the catalogs'
+      # relative archive dir resolves here.
+      - "${CLP_INTEGRATION_TEST_FIXTURE_DIR:-./fixtures}:/var/lib/presto/data/fixtures:ro"
     # Published for runs from the host; the `tests` service does not use it. CI sets the variable
     # to 0 so that concurrent runs on one machine cannot collide.
     ports:
@@ -70,9 +110,13 @@ services:
         condition: "service_healthy"
       install-worker-plugin:
         condition: "service_completed_successfully"
+      seed-fixtures:
+        condition: "service_completed_successfully"
     volumes:
       - "worker-plugin:/opt/presto-server/plugin/clp:ro"
       - "./etc/worker:/opt/presto-server/etc:ro"
+      # At the root, this process's working directory, so the `clp` catalog's relative split paths
+      # resolve here. The `clp_s3` catalog never reads through this mount.
       - "${CLP_INTEGRATION_TEST_FIXTURE_DIR:-./fixtures}:/fixtures:ro"
 
   # Runs the tests inside the cluster's network, because a published port is reachable only from a
