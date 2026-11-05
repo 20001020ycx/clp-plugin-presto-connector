@@ -109,3 +109,23 @@ typed columns. A table without one exposes the single `__json_string` column, re
 The list form matters: CLP stores a field under every type it was written with, and `ClpSchemaTree`
 splits those into suffixed columns (`timestamp_bigint`, `timestamp_double`). A map keyed by field
 name could only declare one, silently misrepresenting any polymorphic field.
+
+## Known failures
+
+Two tests are marked `xfail` and do not block.
+
+The `timestamps` table stores one instant four ways: an ISO string, a float, and two integers
+(microseconds and nanoseconds). All four read back as the same instant, but a filter on that column
+matches only two of them -- the integer-encoded records are dropped.
+
+```sql
+SELECT timestamp_timestamp FROM timestamps;
+-- 2025-04-30 08:50:05.000, four times
+
+SELECT COUNT(*) FROM timestamps WHERE timestamp_timestamp = TIMESTAMP '2025-04-30 08:50:05';
+-- 2
+```
+
+The two tests assert 4, so they fail today. `test_projected_and_filtered_disagree` asserts today's
+numbers instead, so the suite fails if the behaviour ever changes. Fixing it needs a decision about
+whether this connector or CLP should change.
