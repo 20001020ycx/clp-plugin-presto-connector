@@ -15,6 +15,7 @@
  */
 
 #include "connector/search_lib/ClpPackageS3AuthProvider.h"
+#include "connector/search_lib/ClpS3Url.h"
 #include "velox/common/base/Exceptions.h"
 #include "velox/common/config/Config.h"
 
@@ -23,20 +24,13 @@ namespace facebook::velox::connector::clp {
 std::string ClpPackageS3AuthProvider::constructS3Url(
     std::string_view splitPath) {
   VELOX_CHECK(!splitPath.empty(), "splitPath cannot be empty");
-  // For URLs where the bucket is already encoded in the endpoint (e.g., AWS S3
-  // virtual-hosted style: https://bucket.s3.region.amazonaws.com).
-  if (bucket_.empty()) {
-    return fmt::format("{}/{}", endPoint_, splitPath);
-  }
-  return fmt::format("{}/{}/{}", endPoint_, bucket_, splitPath);
+  return search_lib::constructS3Url(endPoint_, bucket_, splitPath);
 }
 
 bool ClpPackageS3AuthProvider::exportAuthEnvironmentVariables() {
   endPoint_ = config_->get<std::string>(kEndPoint, "");
   VELOX_CHECK(!endPoint_.empty(), fmt::format("{} cannot be empty", kEndPoint));
-  if ('/' == endPoint_.back()) {
-    endPoint_.pop_back();
-  }
+  endPoint_ = search_lib::normalizeS3EndPoint(endPoint_);
 
   bucket_ = config_->get<std::string>(kBucket, "");
 

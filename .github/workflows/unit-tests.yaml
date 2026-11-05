@@ -1,0 +1,45 @@
+# Runs the velox-connector unit tests. These cover only the headers that depend on nothing but the
+# standard library, so the job needs neither the build-env image nor the installed dependencies.
+
+name: "unit-tests"
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/unit-tests.yaml"
+      - "taskfile.yaml"
+      - "taskfiles/**"
+      - "tools/**"
+      - "velox-connector/**"
+      - "!**/*.md"
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: "${{github.workflow}}-${{github.ref}}"
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  velox-connector-unit-tests:
+    runs-on: >-
+      ${{ fromJSON(vars.GH_RUNNER_LINUX_LIGHT_X64 || '["ubuntu-24.04"]') }}
+    timeout-minutes: 15
+    permissions:
+      # To check out the repository.
+      contents: "read"
+    steps:
+      - name: "Check out repository"
+        uses: "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"  # v7.0.0
+        with:
+          persist-credentials: false
+          submodules: "recursive"
+
+      - uses: "./tools/yscope-dev-utils/exports/github/actions/install-go-task"
+        with:
+          version: "3.48.0"
+
+      - name: "Run the unit tests"
+        run: "task velox-connector:test"

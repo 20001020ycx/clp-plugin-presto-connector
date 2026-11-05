@@ -8,6 +8,7 @@ includes:
 
 vars:
   G_VELOX_CONNECTOR_BUILD_DIR: "{{.G_BUILD_DIR}}/velox-connector"
+  G_VELOX_CONNECTOR_TESTS_BUILD_DIR: "{{.G_BUILD_DIR}}/velox-connector-tests"
   DEFAULT_DEPS_CPP_DIR: "{{.G_VELOX_CONNECTOR_BUILD_DIR}}/deps/cpp"
   G_DEPS_CPP_DIR: "{{.CLP_PLUGIN_DEPS_CPP_DIR | default .DEFAULT_DEPS_CPP_DIR}}"
   DEFAULT_FETCHCONTENT_BASE_DIR: "{{.G_VELOX_CONNECTOR_BUILD_DIR}}/_deps"
@@ -33,7 +34,21 @@ tasks:
           TARGETS: ["clp-plugin-velox-connector"]
 
   clean:
-    cmd: "rm -rf '{{.G_VELOX_CONNECTOR_BUILD_DIR}}'"
+    cmd: "rm -rf '{{.G_VELOX_CONNECTOR_BUILD_DIR}}' '{{.G_VELOX_CONNECTOR_TESTS_BUILD_DIR}}'"
+
+  # Deliberately independent of `build`: the unit tests cover only the headers that depend on
+  # nothing but the standard library, so they need neither Velox nor the installed dependencies.
+  test:
+    desc: "Runs the velox-connector unit tests."
+    cmds:
+      - task: "utils:cmake:generate"
+        vars:
+          BUILD_DIR: "{{.G_VELOX_CONNECTOR_TESTS_BUILD_DIR}}"
+          SOURCE_DIR: "{{.ROOT_DIR}}/velox-connector/tests"
+      - task: "utils:cmake:build"
+        vars:
+          BUILD_DIR: "{{.G_VELOX_CONNECTOR_TESTS_BUILD_DIR}}"
+      - "ctest --test-dir '{{.G_VELOX_CONNECTOR_TESTS_BUILD_DIR}}' --output-on-failure"
 
   generate:
     internal: true
