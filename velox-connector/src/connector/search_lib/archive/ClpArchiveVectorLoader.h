@@ -32,6 +32,9 @@ namespace facebook::velox::connector::clp::search_lib {
 
 enum class ColumnType;
 
+// thesis-metrics: timers and counters of the scan; see ClpScanStats.h.
+class ClpScanStats;
+
 /// A custom Velox VectorLoader that populates Velox vectors using a CLP-based
 /// column reader over archives. It supports various column types including
 /// integers, floats, booleans, strings, and arrays of strings.
@@ -40,7 +43,8 @@ class ClpArchiveVectorLoader : public VectorLoader {
   ClpArchiveVectorLoader(
       clp_s::BaseColumnReader* columnReader,
       ColumnType nodeType,
-      const std::shared_ptr<std::vector<uint64_t>> filteredRowIndices);
+      const std::shared_ptr<std::vector<uint64_t>> filteredRowIndices,
+      std::shared_ptr<ClpScanStats> scanStats = nullptr);
 
  private:
   inline static thread_local std::unique_ptr<simdjson::ondemand::parser>
@@ -49,6 +53,7 @@ class ClpArchiveVectorLoader : public VectorLoader {
   clp_s::BaseColumnReader* columnReader_;
   ColumnType nodeType_;
   std::shared_ptr<std::vector<uint64_t>> filteredRowIndices_;
+  std::shared_ptr<ClpScanStats> scanStats_;
 
   void loadInternal(
       RowSet rows,

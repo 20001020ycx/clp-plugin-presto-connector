@@ -23,6 +23,8 @@ import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
 
 import javax.inject.Inject;
 
+import java.util.List;
+
 import static java.util.Objects.requireNonNull;
 
 public class ClpSplitManager
@@ -43,7 +45,17 @@ public class ClpSplitManager
             ConnectorTableLayoutHandle layout,
             SplitSchedulingContext splitSchedulingContext)
     {
+        // thesis-metrics: the split provider has no session; it leaves its own timers pending on
+        // this thread.
+        long thesisStart = System.nanoTime();
+        ClpThesisMetrics.clearPending();
         ClpTableLayoutHandle layoutHandle = (ClpTableLayoutHandle) layout;
-        return new FixedSplitSource(clpSplitProvider.listSplits(layoutHandle));
+        List<ClpSplit> splits = clpSplitProvider.listSplits(layoutHandle);
+        ClpThesisMetrics.addNanos(session, "clpListSplitsNanos", System.nanoTime() - thesisStart);
+        ClpThesisMetrics.flushPending(session);
+        ClpThesisMetrics.addCount(session, "clpSplitCount", splits.size());
+        ConnectorSplitSource splitSource = new FixedSplitSource(splits);
+        ClpThesisMetrics.addNanos(session, "clpGetSplitsNanos", System.nanoTime() - thesisStart);
+        return splitSource;
     }
 }

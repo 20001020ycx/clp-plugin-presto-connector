@@ -23,6 +23,7 @@
 #include "clp_s/search/ast/OrOfAndForm.hpp"
 #include "clp_s/search/kql/kql.hpp"
 #include "connector/search_lib/BaseClpCursor.h"
+#include "connector/search_lib/ClpScanStats.h"
 
 using namespace clp_s;
 using namespace clp_s::search;
@@ -35,7 +36,9 @@ void BaseClpCursor::executeQuery(
     const std::vector<Field>& outputColumns) {
   query_ = query;
   outputColumns_ = outputColumns;
+  PhaseLap lap(scanStats_.get());
   errorCode_ = preprocessQuery();
+  lap.mark(ScanPhase::kParseQuery);
 }
 
 ErrorCode BaseClpCursor::preprocessQuery() {

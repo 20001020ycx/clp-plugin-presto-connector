@@ -37,7 +37,11 @@ class ClpDataSource : public DataSource {
       const ConnectorTableHandlePtr& tableHandle,
       const connector::ColumnHandleMap& columnHandles,
       velox::memory::MemoryPool* pool,
-      std::shared_ptr<const ClpConfig>& clpConfig);
+      std::shared_ptr<const ClpConfig>& clpConfig,
+      const std::string& scanLabel = "");
+
+  // thesis-metrics: times the closing of the last split's archive.
+  ~ClpDataSource() override;
 
   void addSplit(std::shared_ptr<ConnectorSplit> split) override;
 
@@ -50,17 +54,15 @@ class ClpDataSource : public DataSource {
     VELOX_NYI("Dynamic filters not supported by ClpConnector.");
   }
 
-  uint64_t getCompletedBytes() override {
-    return completedBytes_;
-  }
+  // thesis-metrics: bytes the scan took from the network readers.
+  uint64_t getCompletedBytes() override;
 
   uint64_t getCompletedRows() override {
     return completedRows_;
   }
 
-  std::unordered_map<std::string, RuntimeMetric> getRuntimeStats() override {
-    return {};
-  }
+  // thesis-metrics: the scan's timers and counters, see ClpScanStats.h.
+  std::unordered_map<std::string, RuntimeMetric> getRuntimeStats() override;
 
  private:
   /// Recursively adds fields from the column type to the list of fields to be
@@ -83,6 +85,7 @@ class ClpDataSource : public DataSource {
 
   std::unique_ptr<search_lib::BaseClpCursor> cursor_;
   std::shared_ptr<ClpS3AuthProviderBase> s3AuthProvider_;
+  std::shared_ptr<search_lib::ClpScanStats> scanStats_;
 };
 
 } // namespace facebook::velox::connector::clp

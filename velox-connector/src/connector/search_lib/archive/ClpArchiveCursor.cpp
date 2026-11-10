@@ -24,6 +24,7 @@
 #include "clp_s/search/ast/SetTimestampLiteralPrecision.hpp"
 #include "clp_s/search/ast/TimestampLiteral.hpp"
 #include "connector/ClpColumnHandle.h"
+#include "connector/search_lib/ClpScanStats.h"
 #include "connector/search_lib/archive/ClpArchiveCursor.h"
 #include "connector/search_lib/archive/ClpArchiveJsonStringVectorLoader.h"
 #include "connector/search_lib/archive/ClpArchiveVectorLoader.h"
@@ -37,8 +38,9 @@ namespace facebook::velox::connector::clp::search_lib {
 
 ClpArchiveCursor::ClpArchiveCursor(
     clp_s::InputSource inputSource,
-    std::string_view splitPath)
-    : BaseClpCursor(inputSource, splitPath),
+    std::string_view splitPath,
+    std::shared_ptr<ClpScanStats> scanStats)
+    : BaseClpCursor(inputSource, splitPath, std::move(scanStats)),
       archiveReader_(std::make_shared<ArchiveReader>()),
       filteredRowIndices_(std::make_shared<std::vector<uint64_t>>()) {}
 
@@ -58,32 +60,48 @@ uint64_t ClpArchiveCursor::fetchNext(uint64_t numRows) {
   }
 
   if (false == currentSplitLoaded_) {
+    PhaseLap loadLap(scanStats_.get());
     errorCode_ = loadSplit();
+    loadLap.mark(ScanPhase::kLoadSplit);
     if (ErrorCode::Success != errorCode_) {
       return 0;
     }
   }
 
+  PhaseLap lap(scanStats_.get());
   while (currentSchemaIndex_ < matchedSchemas_.size()) {
     if (false == currentSchemaTableLoaded_) {
       currentSchemaId_ = matchedSchemas_[currentSchemaIndex_];
       if (EvaluatedValue::False ==
           queryRunner_->schema_init(currentSchemaId_)) {
+        lap.mark(ScanPhase::kSchemaInit);
         currentSchemaIndex_ += 1;
         currentSchemaTableLoaded_ = false;
         errorCode_ = ErrorCode::DictionaryNotFound;
         continue;
       }
 
+      lap.mark(ScanPhase::kSchemaInit);
       schemaReader_ =
           &archiveReader_->read_schema_table(currentSchemaId_, false, false);
+      lap.mark(ScanPhase::kReadTable);
       schemaReader_->initialize_filter_with_column_map(queryRunner_.get());
+      lap.mark(ScanPhase::kFilterInit);
+      if (scanStats_) {
+        scanStats_->addCounter(ScanCounter::kTablesRead, 1);
+      }
 
       errorCode_ = ErrorCode::Success;
       currentSchemaTableLoaded_ = true;
     }
 
     auto rowsScanned = queryRunner_->fetchNext(numRows, filteredRowIndices_);
+    lap.mark(ScanPhase::kFilter);
+    if (scanStats_) {
+      scanStats_->addCounter(ScanCounter::kRowsScanned, rowsScanned);
+      scanStats_->addCounter(
+          ScanCounter::kRowsMatched, filteredRowIndices_->size());
+    }
     if (false == filteredRowIndices_->empty()) {
       return rowsScanned;
     }
@@ -110,7 +128,11 @@ VectorPtr ClpArchiveCursor::createVector(
       "Projected columns size {} does not match fields size {}",
       projectedColumns.size(),
       outputColumns_.size());
-  return createVectorHelper(pool, vectorType, vectorSize, projectedColumns);
+  PhaseLap lap(scanStats_.get());
+  auto vector =
+      createVectorHelper(pool, vectorType, vectorSize, projectedColumns);
+  lap.mark(ScanPhase::kCreateVector);
+  return vector;
 }
 
 const std::vector<clp_s::BaseColumnReader*>&
@@ -127,6 +149,7 @@ ErrorCode ClpArchiveCursor::loadSplit() {
       ? NetworkAuthOption{.method = AuthMethod::None}
       : NetworkAuthOption{.method = AuthMethod::S3PresignedUrlV4};
 
+  PhaseLap lap(scanStats_.get());
   try {
     archiveReader_->open(
         get_path_object_for_raw_path(splitPath_), networkAuthOption);
@@ -134,6 +157,7 @@ ErrorCode ClpArchiveCursor::loadSplit() {
     VLOG(2) << "Failed to open archive file: " << e.what();
     return ErrorCode::InternalError;
   }
+  lap.mark(ScanPhase::kOpenArchive);
 
   auto timestampDict = archiveReader_->get_timestamp_dictionary();
   auto schemaTree = archiveReader_->get_schema_tree();
@@ -159,6 +183,7 @@ ErrorCode ClpArchiveCursor::loadSplit() {
     VLOG(2) << "No matching schemas for query '" << query_ << "'";
     return ErrorCode::SchemaNotFound;
   }
+  lap.mark(ScanPhase::kTimestampIndexAndSchemaMatch);
 
   projection_ = std::make_shared<Projection>(
       outputColumns_.empty() ? ReturnAllColumns : ReturnSelectedColumns, true);
@@ -213,14 +238,22 @@ ErrorCode ClpArchiveCursor::loadSplit() {
     return ErrorCode::InternalError;
   }
   projection_->resolve_columns(schemaTree);
+  lap.mark(ScanPhase::kProjection);
 
   archiveReader_->read_metadata();
+  lap.mark(ScanPhase::kReadTableMetadata);
 
   matchedSchemas_.clear();
   for (auto schemaId : archiveReader_->get_schema_ids()) {
     if (schemaMatch_->schema_matched(schemaId)) {
       matchedSchemas_.push_back(schemaId);
     }
+  }
+  if (scanStats_) {
+    scanStats_->addCounter(
+        ScanCounter::kSchemasInArchive, archiveReader_->get_schema_ids().size());
+    scanStats_->addCounter(
+        ScanCounter::kSchemasMatched, matchedSchemas_.size());
   }
 
   if (matchedSchemas_.empty()) {
@@ -232,19 +265,23 @@ ErrorCode ClpArchiveCursor::loadSplit() {
     VLOG(2) << "No matching timestamp ranges for query '" << query_ << "'";
     return ErrorCode::InvalidTimestampRange;
   }
+  lap.mark(ScanPhase::kTimestampIndexAndSchemaMatch);
 
   archiveReader_->read_variable_dictionary();
   archiveReader_->read_log_type_dictionary();
   archiveReader_->read_array_dictionary();
+  lap.mark(ScanPhase::kLoadDictionaries);
 
   currentSchemaIndex_ = 0;
   currentSchemaTableLoaded_ = false;
 
   archiveReader_->open_packed_streams();
+  lap.mark(ScanPhase::kOpenPackedStreams);
   currentSplitLoaded_ = true;
   queryRunner_ = std::make_shared<ClpQueryRunner>(
       schemaMatch_, expr_, archiveReader_, false, projection_);
   queryRunner_->global_init();
+  lap.mark(ScanPhase::kQueryRunnerInit);
   return ErrorCode::Success;
 }
 
@@ -276,7 +313,7 @@ VectorPtr ClpArchiveCursor::createVectorHelper(
         vectorType,
         vectorSize,
         std::make_unique<ClpArchiveJsonStringVectorLoader>(
-            schemaReader_, filteredRowIndices_),
+            schemaReader_, filteredRowIndices_, scanStats_),
         std::move(vector));
   }
 
@@ -293,7 +330,7 @@ VectorPtr ClpArchiveCursor::createVectorHelper(
       vectorType,
       vectorSize,
       std::make_unique<ClpArchiveVectorLoader>(
-          projectedColumn, projectedType, filteredRowIndices_),
+          projectedColumn, projectedType, filteredRowIndices_, scanStats_),
       std::move(vector));
 }
 

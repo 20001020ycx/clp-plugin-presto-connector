@@ -17,6 +17,7 @@ import com.facebook.airlift.log.Logger;
 import com.facebook.presto.plugin.clp.ClpExpression;
 import com.facebook.presto.plugin.clp.ClpTableHandle;
 import com.facebook.presto.plugin.clp.ClpTableLayoutHandle;
+import com.facebook.presto.plugin.clp.ClpThesisMetrics;
 import com.facebook.presto.plugin.clp.split.filter.ClpSplitFilterProvider;
 import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ConnectorPlanOptimizer;
@@ -61,6 +62,18 @@ public class ClpComputePushDown
 
     @Override
     public PlanNode optimize(PlanNode maxSubplan, ConnectorSession session, VariableAllocator variableAllocator, PlanNodeIdAllocator idAllocator)
+    {
+        // thesis-metrics: the whole pass (KQL and metadata-SQL pushdown).
+        long thesisStart = System.nanoTime();
+        try {
+            return optimizeImpl(maxSubplan, idAllocator);
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpComputePushDownNanos", System.nanoTime() - thesisStart);
+        }
+    }
+
+    private PlanNode optimizeImpl(PlanNode maxSubplan, PlanNodeIdAllocator idAllocator)
     {
         Rewriter rewriter = new Rewriter(idAllocator);
         PlanNode optimizedPlanNode = rewriteWith(rewriter, maxSubplan);

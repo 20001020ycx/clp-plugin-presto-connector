@@ -17,6 +17,7 @@
 #include <cstdint>
 
 #include "clp_s/ColumnReader.hpp"
+#include "connector/search_lib/ClpScanStats.h"
 #include "connector/search_lib/archive/ClpArchiveJsonStringVectorLoader.h"
 #include "velox/vector/ComplexVector.h"
 
@@ -24,8 +25,11 @@ namespace facebook::velox::connector::clp::search_lib {
 
 ClpArchiveJsonStringVectorLoader::ClpArchiveJsonStringVectorLoader(
     clp_s::SchemaReader* schemaReader,
-    const std::shared_ptr<std::vector<uint64_t>>& filteredRowIndices)
-    : schemaReader_(schemaReader), filteredRowIndices_(filteredRowIndices) {
+    const std::shared_ptr<std::vector<uint64_t>>& filteredRowIndices,
+    std::shared_ptr<ClpScanStats> scanStats)
+    : schemaReader_(schemaReader),
+      filteredRowIndices_(filteredRowIndices),
+      scanStats_(std::move(scanStats)) {
   schemaReader_->initialize_serializer();
 }
 
@@ -38,13 +42,20 @@ void ClpArchiveJsonStringVectorLoader::loadInternal(
   VELOX_CHECK_NULL(
       hook, "ClpArchiveJsonStringVectorLoader doesn't support ValueHook");
 
+  LazyLoadTimer timer(scanStats_.get(), ScanPhase::kLazyLoadJson);
+  uint64_t jsonBytes{0};
   auto vector = *result;
   auto* stringVector = vector->asFlatVector<StringView>();
   for (vector_size_t const vectorIndex : rows) {
     auto messageIndex = filteredRowIndices_->at(vectorIndex);
     auto jsonString = schemaReader_->generate_json_string(messageIndex);
+    jsonBytes += jsonString.size();
     stringVector->set(vectorIndex, StringView(jsonString));
     stringVector->setNull(vectorIndex, false);
+  }
+  if (scanStats_) {
+    scanStats_->addCounter(ScanCounter::kLazyJsonRows, rows.size());
+    scanStats_->addCounter(ScanCounter::kLazyJsonBytes, jsonBytes);
   }
 }
 

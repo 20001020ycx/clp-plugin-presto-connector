@@ -83,6 +83,11 @@ FetchContent_Declare(clp
   GIT_REPOSITORY https://github.com/y-scope/clp.git
   GIT_TAG        a91e5f71f0715d7d6b3ea7c177e1b39b3e6a24a6
   SOURCE_SUBDIR components/core
+  # thesis-metrics: counters in CLP's network reader (measurement only). The first two commands
+  # undo an earlier application so that the step can run again.
+  PATCH_COMMAND git checkout -- .
+        COMMAND ${CMAKE_COMMAND} -E rm -f components/core/src/clp/ThesisNetworkCounters.hpp
+        COMMAND git apply ${CMAKE_CURRENT_LIST_DIR}/patches/clp-thesis-metrics.patch
 )
 FetchContent_MakeAvailable(clp)
 

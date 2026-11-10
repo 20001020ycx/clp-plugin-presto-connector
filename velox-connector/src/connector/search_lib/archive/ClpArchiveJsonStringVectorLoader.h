@@ -22,17 +22,22 @@
 
 namespace facebook::velox::connector::clp::search_lib {
 
+// thesis-metrics: timers and counters of the scan; see ClpScanStats.h.
+class ClpScanStats;
+
 /// A custom Velox VectorLoader that populates Velox vectors with serialized
 /// JSON string from CLP column readers for the archive format.
 class ClpArchiveJsonStringVectorLoader : public VectorLoader {
  public:
   ClpArchiveJsonStringVectorLoader(
       clp_s::SchemaReader* schemaReader,
-      const std::shared_ptr<std::vector<uint64_t>>& filteredRowIndices);
+      const std::shared_ptr<std::vector<uint64_t>>& filteredRowIndices,
+      std::shared_ptr<ClpScanStats> scanStats = nullptr);
 
  private:
   clp_s::SchemaReader* schemaReader_;
   std::shared_ptr<std::vector<uint64_t>> filteredRowIndices_;
+  std::shared_ptr<ClpScanStats> scanStats_;
 
   void loadInternal(
       RowSet rows,

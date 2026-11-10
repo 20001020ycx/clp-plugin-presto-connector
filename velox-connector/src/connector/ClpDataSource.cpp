@@ -21,19 +21,45 @@
 #include "connector/ClpDataSource.h"
 #include "connector/ClpTableHandle.h"
 #include "connector/search_lib/ClpS3AuthProviderBase.h"
+#include "connector/search_lib/ClpScanStats.h"
 #include "connector/search_lib/archive/ClpArchiveCursor.h"
 #include "connector/search_lib/ir/ClpIrCursor.h"
 #include "velox/vector/FlatVector.h"
 
 namespace facebook::velox::connector::clp {
 
+namespace {
+using search_lib::ClpScanStats;
+using search_lib::ScanPhase;
+
+// thesis-metrics: adds the time from construction to destruction to one of
+// the data source's outer phases.
+class OuterScope {
+ public:
+  OuterScope(ClpScanStats& stats, ScanPhase phase)
+      : stats_(stats), phase_(phase), begin_(ClpScanStats::mark()) {}
+
+  ~OuterScope() {
+    stats_.addOuter(phase_, begin_, ClpScanStats::mark());
+  }
+
+ private:
+  ClpScanStats& stats_;
+  const ScanPhase phase_;
+  const ClpScanStats::Mark begin_;
+};
+} // namespace
+
 ClpDataSource::ClpDataSource(
     const RowTypePtr& outputType,
     const ConnectorTableHandlePtr& tableHandle,
     const connector::ColumnHandleMap& columnHandles,
     velox::memory::MemoryPool* pool,
-    std::shared_ptr<const ClpConfig>& clpConfig)
-    : pool_(pool), outputType_(outputType) {
+    std::shared_ptr<const ClpConfig>& clpConfig,
+    const std::string& scanLabel)
+    : pool_(pool),
+      outputType_(outputType),
+      scanStats_(std::make_shared<ClpScanStats>(scanLabel)) {
   auto clpTableHandle =
       std::dynamic_pointer_cast<const ClpTableHandle>(tableHandle);
   storageType_ = clpConfig->storageType();
@@ -55,6 +81,24 @@ ClpDataSource::ClpDataSource(
     auto columnType = clpColumnHandle->columnType();
     addFieldsRecursively(columnType, columnName);
   }
+}
+
+ClpDataSource::~ClpDataSource() {
+  auto const begin = ClpScanStats::mark();
+  cursor_.reset();
+  if (scanStats_->splitOpen()) {
+    scanStats_->addOuter(ScanPhase::kCloseArchive, begin, ClpScanStats::mark());
+    scanStats_->finishSplit();
+  }
+}
+
+uint64_t ClpDataSource::getCompletedBytes() {
+  return scanStats_->bytesConsumedTotal();
+}
+
+std::unordered_map<std::string, RuntimeMetric>
+ClpDataSource::getRuntimeStats() {
+  return scanStats_->runtimeStats();
 }
 
 void ClpDataSource::addFieldsRecursively(
@@ -100,6 +144,7 @@ void ClpDataSource::addFieldsRecursively(
 }
 
 void ClpDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
+  auto const addSplitBegin = ClpScanStats::mark();
   auto clpSplit = std::dynamic_pointer_cast<ClpConnectorSplit>(split);
 
   std::string splitPath = clpSplit->path_;
@@ -113,16 +158,32 @@ void ClpDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
     VELOX_UNREACHABLE();
   }
 
+  std::unique_ptr<search_lib::BaseClpCursor> newCursor;
   if (ClpConnectorSplit::SplitType::kArchive == clpSplit->type_) {
-    cursor_ =
-        std::make_unique<search_lib::ClpArchiveCursor>(inputSource, splitPath);
+    newCursor = std::make_unique<search_lib::ClpArchiveCursor>(
+        inputSource, splitPath, scanStats_);
   } else if (ClpConnectorSplit::SplitType::kIr == clpSplit->type_) {
-    cursor_ =
+    newCursor =
         std::make_unique<search_lib::ClpIrCursor>(inputSource, splitPath, true);
   } else {
     VELOX_UNSUPPORTED(
         "Unsupported split type: {}", static_cast<int>(clpSplit->type_));
   }
+
+  // thesis-metrics: as before, the new cursor exists before the assignment
+  // destroys the previous split's cursor, which closes that split's archive.
+  // The time of that is the previous split's; the rest of this call is the new
+  // split's.
+  auto const closeBegin = ClpScanStats::mark();
+  cursor_ = std::move(newCursor);
+  auto const closeEnd = ClpScanStats::mark();
+  if (scanStats_->splitOpen()) {
+    scanStats_->addOuter(ScanPhase::kCloseArchive, closeBegin, closeEnd);
+    scanStats_->finishSplit();
+  }
+  // The split's path as the coordinator sent it, not the signed URL.
+  scanStats_->beginSplit(clpSplit->path_);
+  scanStats_->addOuter(ScanPhase::kAddSplit, addSplitBegin, closeBegin);
 
   auto pushDownQuery = clpSplit->kqlQuery_;
   if (pushDownQuery && !pushDownQuery->empty()) {
@@ -130,11 +191,14 @@ void ClpDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   } else {
     cursor_->executeQuery("*", fields_);
   }
+  scanStats_->addOuter(
+      ScanPhase::kAddSplit, closeEnd, ClpScanStats::mark(), false);
 }
 
 std::optional<RowVectorPtr> ClpDataSource::next(
     uint64_t size,
     ContinueFuture& future) {
+  OuterScope scope(*scanStats_, ScanPhase::kNext);
   auto rowsScanned = cursor_->fetchNext(size);
   auto rowsFiltered = cursor_->getNumFilteredRows();
   if (rowsFiltered == 0) {

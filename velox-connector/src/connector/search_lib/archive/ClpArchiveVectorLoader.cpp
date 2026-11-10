@@ -21,6 +21,7 @@
 #include "clp_s/ColumnReader.hpp"
 #include "clp_s/SchemaTree.hpp"
 #include "connector/search_lib/BaseClpCursor.h"
+#include "connector/search_lib/ClpScanStats.h"
 #include "connector/search_lib/ClpTimestampsUtils.h"
 #include "connector/search_lib/archive/ClpArchiveVectorLoader.h"
 #include "velox/type/Timestamp.h"
@@ -32,10 +33,12 @@ namespace facebook::velox::connector::clp::search_lib {
 ClpArchiveVectorLoader::ClpArchiveVectorLoader(
     clp_s::BaseColumnReader* columnReader,
     ColumnType nodeType,
-    const std::shared_ptr<std::vector<uint64_t>> filteredRowIndices)
+    const std::shared_ptr<std::vector<uint64_t>> filteredRowIndices,
+    std::shared_ptr<ClpScanStats> scanStats)
     : columnReader_(columnReader),
       nodeType_(nodeType),
-      filteredRowIndices_(std::move(filteredRowIndices)) {}
+      filteredRowIndices_(std::move(filteredRowIndices)),
+      scanStats_(std::move(scanStats)) {}
 
 template <typename T, typename VectorPtr>
 void ClpArchiveVectorLoader::populateData(RowSet rows, VectorPtr vector) {
@@ -138,6 +141,10 @@ void ClpArchiveVectorLoader::loadInternal(
     VectorPtr* result) {
   VELOX_CHECK_NOT_NULL(result, "result vector must not be null");
 
+  LazyLoadTimer timer(scanStats_.get(), ScanPhase::kLazyLoadColumn);
+  if (scanStats_) {
+    scanStats_->addCounter(ScanCounter::kLazyColumnRows, rows.size());
+  }
   auto vector = *result;
   switch (nodeType_) {
     case ColumnType::Integer: {

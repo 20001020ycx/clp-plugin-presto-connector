@@ -87,28 +87,40 @@ public class ClpMetadata
     @Override
     public List<SchemaTableName> listTables(ConnectorSession session, Optional<String> schemaName)
     {
-        String schemaNameValue = schemaName.orElse(DEFAULT_SCHEMA_NAME);
-        if (!listSchemaNames(session).contains(schemaNameValue)) {
-            return ImmutableList.of();
-        }
+        long thesisStart = System.nanoTime();
+        try {
+            String schemaNameValue = schemaName.orElse(DEFAULT_SCHEMA_NAME);
+            if (!listSchemaNames(session).contains(schemaNameValue)) {
+                return ImmutableList.of();
+            }
 
-        return listTables(schemaNameValue).stream()
-                .map(tableHandle -> new SchemaTableName(schemaNameValue, tableHandle.getSchemaTableName().getTableName()))
-                .collect(toImmutableList());
+            return listTableHandles(session, schemaNameValue).stream()
+                    .map(tableHandle -> new SchemaTableName(schemaNameValue, tableHandle.getSchemaTableName().getTableName()))
+                    .collect(toImmutableList());
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpMetadataListTablesNanos", System.nanoTime() - thesisStart);
+        }
     }
 
     @Override
     public ConnectorTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName)
     {
-        String schemaName = tableName.getSchemaName();
-        if (!listSchemaNames(session).contains(schemaName)) {
-            return null;
-        }
+        long thesisStart = System.nanoTime();
+        try {
+            String schemaName = tableName.getSchemaName();
+            if (!listSchemaNames(session).contains(schemaName)) {
+                return null;
+            }
 
-        return listTables(schemaName).stream()
-                .filter(tableHandle -> tableHandle.getSchemaTableName().equals(tableName))
-                .findFirst()
-                .orElse(null);
+            return listTableHandles(session, schemaName).stream()
+                    .filter(tableHandle -> tableHandle.getSchemaTableName().equals(tableName))
+                    .findFirst()
+                    .orElse(null);
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpMetadataGetTableHandleNanos", System.nanoTime() - thesisStart);
+        }
     }
 
     @Override
@@ -132,17 +144,35 @@ public class ClpMetadata
     @Override
     public ConnectorTableMetadata getTableMetadata(ConnectorSession session, ConnectorTableHandle table)
     {
-        ClpTableHandle clpTableHandle = (ClpTableHandle) table;
-        SchemaTableName schemaTableName = clpTableHandle.getSchemaTableName();
-        List<ColumnMetadata> columns = listColumns(schemaTableName).stream()
-                .map(ClpColumnHandle::getColumnMetadata)
-                .collect(toImmutableList());
+        long thesisStart = System.nanoTime();
+        try {
+            ClpTableHandle clpTableHandle = (ClpTableHandle) table;
+            SchemaTableName schemaTableName = clpTableHandle.getSchemaTableName();
+            List<ColumnMetadata> columns = listColumns(session, schemaTableName).stream()
+                    .map(ClpColumnHandle::getColumnMetadata)
+                    .collect(toImmutableList());
 
-        return new ConnectorTableMetadata(schemaTableName, columns);
+            return new ConnectorTableMetadata(schemaTableName, columns);
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpMetadataGetTableMetadataNanos", System.nanoTime() - thesisStart);
+        }
     }
 
     @Override
     public Map<SchemaTableName, List<ColumnMetadata>> listTableColumns(ConnectorSession session, SchemaTablePrefix prefix)
+    {
+        // thesis-metrics: this duration contains those of the calls it makes below.
+        long thesisStart = System.nanoTime();
+        try {
+            return listTableColumnsImpl(session, prefix);
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpMetadataListTableColumnsNanos", System.nanoTime() - thesisStart);
+        }
+    }
+
+    private Map<SchemaTableName, List<ColumnMetadata>> listTableColumnsImpl(ConnectorSession session, SchemaTablePrefix prefix)
     {
         requireNonNull(prefix, "prefix is null");
         String schemaName = prefix.getSchemaName();
@@ -173,8 +203,14 @@ public class ClpMetadata
     @Override
     public Map<String, ColumnHandle> getColumnHandles(ConnectorSession session, ConnectorTableHandle tableHandle)
     {
-        ClpTableHandle clpTableHandle = (ClpTableHandle) tableHandle;
-        return listColumns(clpTableHandle.getSchemaTableName()).stream().collect(toImmutableMap(ClpColumnHandle::getColumnName, column -> column));
+        long thesisStart = System.nanoTime();
+        try {
+            ClpTableHandle clpTableHandle = (ClpTableHandle) tableHandle;
+            return listColumns(session, clpTableHandle.getSchemaTableName()).stream().collect(toImmutableMap(ClpColumnHandle::getColumnName, column -> column));
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpMetadataGetColumnHandlesNanos", System.nanoTime() - thesisStart);
+        }
     }
 
     @Override
@@ -184,24 +220,56 @@ public class ClpMetadata
         return clpColumnHandle.getColumnMetadata();
     }
 
+    // thesis-metrics: the loaders run on the thread of the lookup that misses (or that refreshes
+    // an entry), so the lookup below finds the loader's duration pending and counts a miss.
     private List<ClpColumnHandle> loadColumnHandles(SchemaTableName schemaTableName)
     {
-        return clpMetadataProvider.listColumnHandles(schemaTableName);
+        long thesisStart = System.nanoTime();
+        try {
+            return clpMetadataProvider.listColumnHandles(schemaTableName);
+        }
+        finally {
+            ClpThesisMetrics.pendingNanos("clpColumnHandleCacheLoadNanos", System.nanoTime() - thesisStart);
+        }
     }
 
     private List<ClpTableHandle> loadTableHandles(String schemaName)
     {
-        return clpMetadataProvider.listTableHandles(schemaName);
+        long thesisStart = System.nanoTime();
+        try {
+            return clpMetadataProvider.listTableHandles(schemaName);
+        }
+        finally {
+            ClpThesisMetrics.pendingNanos("clpTableHandleCacheLoadNanos", System.nanoTime() - thesisStart);
+        }
     }
 
-    private List<ClpColumnHandle> listColumns(SchemaTableName schemaTableName)
+    private List<ClpColumnHandle> listColumns(ConnectorSession session, SchemaTableName schemaTableName)
     {
-        return columnHandleCache.getUnchecked(schemaTableName);
+        ClpThesisMetrics.clearPending();
+        long thesisStart = System.nanoTime();
+        try {
+            return columnHandleCache.getUnchecked(schemaTableName);
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpColumnHandleCacheLookupNanos", System.nanoTime() - thesisStart);
+            boolean loaded = ClpThesisMetrics.flushPending(session);
+            ClpThesisMetrics.addCount(session, loaded ? "clpColumnHandleCacheMisses" : "clpColumnHandleCacheHits", 1);
+        }
     }
 
-    private List<ClpTableHandle> listTables(String schemaName)
+    private List<ClpTableHandle> listTableHandles(ConnectorSession session, String schemaName)
     {
-        return tableHandleCache.getUnchecked(schemaName);
+        ClpThesisMetrics.clearPending();
+        long thesisStart = System.nanoTime();
+        try {
+            return tableHandleCache.getUnchecked(schemaName);
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpTableHandleCacheLookupNanos", System.nanoTime() - thesisStart);
+            boolean loaded = ClpThesisMetrics.flushPending(session);
+            ClpThesisMetrics.addCount(session, loaded ? "clpTableHandleCacheMisses" : "clpTableHandleCacheHits", 1);
+        }
     }
 
     // Presto 0.297 added normalizeIdentifier() to MetadataManager.getColumnHandles(), which

@@ -18,6 +18,7 @@ import com.facebook.presto.plugin.clp.ClpConfig;
 import com.facebook.presto.plugin.clp.ClpSplit;
 import com.facebook.presto.plugin.clp.ClpTableHandle;
 import com.facebook.presto.plugin.clp.ClpTableLayoutHandle;
+import com.facebook.presto.plugin.clp.ClpThesisMetrics;
 import com.google.common.collect.ImmutableList;
 
 import javax.inject.Inject;
@@ -76,14 +77,21 @@ public class ClpMySqlSplitProvider
         }
         log.debug("Query for archive: %s", archivePathQuery);
 
+        // thesis-metrics: connecting, running the statement, and reading its rows into splits.
+        long thesisStart = System.nanoTime();
         try (Connection connection = getConnection()) {
+            long thesisConnected = System.nanoTime();
+            ClpThesisMetrics.pendingNanos("clpListSplitsConnectNanos", thesisConnected - thesisStart);
             // Fetch archive IDs and create splits
             try (PreparedStatement statement = connection.prepareStatement(archivePathQuery); ResultSet resultSet = statement.executeQuery()) {
+                long thesisExecuted = System.nanoTime();
+                ClpThesisMetrics.pendingNanos("clpListSplitsQueryNanos", thesisExecuted - thesisConnected);
                 while (resultSet.next()) {
                     final String archiveId = resultSet.getString(ARCHIVES_TABLE_COLUMN_ID);
                     final String archivePath = tablePath + "/" + archiveId;
                     splits.add(new ClpSplit(archivePath, ARCHIVE, clpTableLayoutHandle.getKqlQuery()));
                 }
+                ClpThesisMetrics.pendingNanos("clpListSplitsFetchNanos", System.nanoTime() - thesisExecuted);
             }
         }
         catch (SQLException e) {

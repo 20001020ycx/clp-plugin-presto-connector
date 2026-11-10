@@ -1,0 +1,212 @@
+diff --git a/components/core/src/clp/NetworkReader.cpp b/components/core/src/clp/NetworkReader.cpp
+index cd4f410..a61b2ff 100644
+--- a/components/core/src/clp/NetworkReader.cpp
++++ b/components/core/src/clp/NetworkReader.cpp
+@@ -12,13 +12,20 @@
+ #include <utility>
+ 
+ #include <curl/curl.h>
++#include <time.h>
+ 
+ #include "CurlDownloadHandler.hpp"
+ #include "CurlOperationFailed.hpp"
+ #include "ErrorCode.hpp"
+ #include "Platform.hpp"
++#include "ThesisNetworkCounters.hpp"
+ 
+ namespace clp {
++auto thesis_network_counters() -> ThesisNetworkCounters& {
++    thread_local ThesisNetworkCounters counters;
++    return counters;
++}
++
+ /**
+  * To understand the implementation, we first define several terms:
+  *
+@@ -112,6 +119,25 @@ extern "C" auto curl_write_callback(char* ptr, size_t size, size_t nmemb, void*
+         -> size_t {
+     return static_cast<NetworkReader*>(reader_ptr)->buffer_downloaded_data({ptr, size * nmemb});
+ }
++
++// thesis-metrics
++[[nodiscard]] auto thesis_ns_since(std::chrono::steady_clock::time_point begin) -> uint64_t {
++    return static_cast<uint64_t>(
++            std::chrono::duration_cast<std::chrono::nanoseconds>(
++                    std::chrono::steady_clock::now() - begin
++            )
++                    .count()
++    );
++}
++
++// thesis-metrics
++[[nodiscard]] auto thesis_thread_cpu_ns() -> uint64_t {
++    struct timespec ts {};
++    if (0 != clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts)) {
++        return 0;
++    }
++    return static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ULL + static_cast<uint64_t>(ts.tv_nsec);
++}
+ }  // namespace
+ 
+ NetworkReader::NetworkReader(
+@@ -141,9 +167,11 @@ NetworkReader::NetworkReader(
+             std::move(http_header_kv_pairs)
+     );
+     m_downloader_thread->start();
++    ++thesis_network_counters().requests;  // thesis-metrics
+ }
+ 
+ NetworkReader::~NetworkReader() {
++    auto const thesis_begin{std::chrono::steady_clock::now()};  // thesis-metrics
+     if (is_download_in_progress()) {
+         // Abort the download so the downloader thread can destroy the CURL resources and exit.
+         submit_abort_download_request();
+@@ -152,6 +180,14 @@ NetworkReader::~NetworkReader() {
+     while (is_downloader_thread_running()) {
+         // We could use sleep instead of busy waiting
+     }
++
++    // thesis-metrics
++    auto& counters{thesis_network_counters()};
++    ++counters.readers_closed;
++    counters.close_wait_ns += thesis_ns_since(thesis_begin);
++    counters.bytes_downloaded += m_thesis_bytes_downloaded.load();
++    counters.downloader_cpu_ns += m_thesis_downloader_cpu_ns.load();
++    counters.downloader_wall_ns += m_thesis_downloader_wall_ns.load();
+ }
+ 
+ auto NetworkReader::try_get_pos(size_t& pos) -> ErrorCode {
+@@ -194,6 +230,7 @@ auto NetworkReader::buffer_downloaded_data(NetworkReader::BufferView data) -> si
+         m_at_least_one_byte_downloaded.store(true);
+     }
+     auto const num_bytes_to_write{data.size()};
++    m_thesis_bytes_downloaded.fetch_add(num_bytes_to_write, std::memory_order_relaxed);
+     while (false == data.empty()) {
+         acquire_empty_buffer();
+         if (false == m_curr_downloader_buf.has_value()) {
+@@ -214,6 +251,8 @@ auto NetworkReader::buffer_downloaded_data(NetworkReader::BufferView data) -> si
+ }
+ 
+ auto NetworkReader::DownloaderThread::thread_method() -> void {
++    auto const thesis_begin{std::chrono::steady_clock::now()};  // thesis-metrics
++    auto const thesis_cpu_begin{thesis_thread_cpu_ns()};
+     try {
+         CurlDownloadHandler curl_handler{
+                 m_reader.m_curl_error_msg_buf,
+@@ -235,6 +274,11 @@ auto NetworkReader::DownloaderThread::thread_method() -> void {
+         m_reader.set_download_completion_status(ex.get_curl_err());
+     }
+ 
++    // thesis-metrics: stored before this thread stops counting as running, so that the reader's
++    // destructor reads final values.
++    m_reader.m_thesis_downloader_cpu_ns.store(thesis_thread_cpu_ns() - thesis_cpu_begin);
++    m_reader.m_thesis_downloader_wall_ns.store(thesis_ns_since(thesis_begin));
++
+     std::unique_lock<std::mutex> const buffer_resource_lock{m_reader.m_buffer_resource_mutex};
+     m_reader.m_reader_cv.notify_all();
+ }
+@@ -294,12 +338,28 @@ auto NetworkReader::get_filled_buffer() -> void {
+         return;
+     }
+     std::unique_lock<std::mutex> buffer_resource_lock{m_buffer_resource_mutex};
++    // thesis-metrics: the clock is read only when the thread has to wait.
++    bool thesis_waited{false};
++    std::chrono::steady_clock::time_point thesis_wait_begin;
++    auto const thesis_record_wait = [&]() {
++        if (thesis_waited) {
++            auto& counters{thesis_network_counters()};
++            counters.wait_ns += thesis_ns_since(thesis_wait_begin);
++            ++counters.wait_count;
++        }
++    };
+     while (m_filled_buffer_queue.empty()) {
+         if (false == is_download_in_progress()) {
++            thesis_record_wait();
+             return;
+         }
++        if (false == thesis_waited) {
++            thesis_waited = true;
++            thesis_wait_begin = std::chrono::steady_clock::now();
++        }
+         m_reader_cv.wait(buffer_resource_lock);
+     }
++    thesis_record_wait();
+     auto const next_reader_buffer{m_filled_buffer_queue.front()};
+     m_curr_reader_buf.emplace(next_reader_buffer);
+ }
+@@ -315,6 +375,7 @@ NetworkReader::read_from_filled_buffers(size_t num_bytes_to_read, size_t& num_by
+     while (num_bytes_to_read > 0) {
+         get_filled_buffer();
+         if (false == m_curr_reader_buf.has_value()) {
++            thesis_network_counters().bytes_consumed += num_bytes_read;  // thesis-metrics
+             return num_bytes_read > 0 ? ErrorCode_Success : ErrorCode_EndOfFile;
+         }
+         auto& curr_reader_buf{m_curr_reader_buf.value()};
+@@ -334,6 +395,7 @@ NetworkReader::read_from_filled_buffers(size_t num_bytes_to_read, size_t& num_by
+             release_empty_buffer();
+         }
+     }
++    thesis_network_counters().bytes_consumed += num_bytes_read;  // thesis-metrics
+     return ErrorCode_Success;
+ }
+ }  // namespace clp
+diff --git a/components/core/src/clp/NetworkReader.hpp b/components/core/src/clp/NetworkReader.hpp
+index 37a9995..41a86b6 100644
+--- a/components/core/src/clp/NetworkReader.hpp
++++ b/components/core/src/clp/NetworkReader.hpp
+@@ -357,6 +357,11 @@ private:
+     std::atomic<bool> m_at_least_one_byte_downloaded{false};
+     std::atomic<bool> m_abort_download_requested{false};
+ 
++    // thesis-metrics: written by the downloader thread, read by the destructor.
++    std::atomic<uint64_t> m_thesis_bytes_downloaded{0};
++    std::atomic<uint64_t> m_thesis_downloader_cpu_ns{0};
++    std::atomic<uint64_t> m_thesis_downloader_wall_ns{0};
++
+     // These two members should only be set from `set_download_completion_status`
+     std::atomic<State> m_state{State::InProgress};
+     std::atomic<std::optional<CURLcode>> m_curl_ret_code;
+diff --git a/components/core/src/clp/ThesisNetworkCounters.hpp b/components/core/src/clp/ThesisNetworkCounters.hpp
+new file mode 100644
+index 0000000..3fd04b4
+--- /dev/null
++++ b/components/core/src/clp/ThesisNetworkCounters.hpp
+@@ -0,0 +1,38 @@
++#ifndef CLP_THESISNETWORKCOUNTERS_HPP
++#define CLP_THESISNETWORKCOUNTERS_HPP
++
++#include <cstdint>
++
++namespace clp {
++/**
++ * thesis-metrics: counters of what `NetworkReader` instances did on behalf of the calling thread.
++ * Measurement only; nothing reads them to make a decision. A caller takes the difference of two
++ * readings made on the same thread.
++ */
++struct ThesisNetworkCounters {
++    // Time the reading thread was blocked in `get_filled_buffer` because no downloaded data was
++    // buffered yet, and the number of such waits.
++    uint64_t wait_ns{0};
++    uint64_t wait_count{0};
++    // Bytes the reading thread took out of the buffers (read or skipped by a forward seek).
++    uint64_t bytes_consumed{0};
++    // `NetworkReader` instances constructed by this thread (each sends one HTTP GET).
++    uint64_t requests{0};
++    // The following are added when a `NetworkReader` is destroyed, on the destroying thread.
++    uint64_t readers_closed{0};
++    // Bytes libcurl handed to the write callback.
++    uint64_t bytes_downloaded{0};
++    // Time the destructor spent asking the download to stop and waiting for the downloader thread.
++    uint64_t close_wait_ns{0};
++    // CPU and wall time of the downloader thread's `thread_method`.
++    uint64_t downloader_cpu_ns{0};
++    uint64_t downloader_wall_ns{0};
++};
++
++/**
++ * @return The calling thread's counters.
++ */
++[[nodiscard]] auto thesis_network_counters() -> ThesisNetworkCounters&;
++}  // namespace clp
++
++#endif  // CLP_THESISNETWORKCOUNTERS_HPP

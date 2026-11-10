@@ -40,7 +40,8 @@ class ClpArchiveCursor final : public BaseClpCursor {
  public:
   explicit ClpArchiveCursor(
       clp_s::InputSource inputSource,
-      std::string_view splitPath);
+      std::string_view splitPath,
+      std::shared_ptr<ClpScanStats> scanStats = nullptr);
   ~ClpArchiveCursor() override;
 
   uint64_t fetchNext(uint64_t numRows) override;

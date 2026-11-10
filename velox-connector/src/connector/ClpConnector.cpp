@@ -34,7 +34,10 @@ std::unique_ptr<DataSource> ClpConnector::createDataSource(
       tableHandle,
       columnHandles,
       connectorQueryCtx->memoryPool(),
-      config_);
+      config_,
+      // thesis-metrics: names the scan in the worker's log.
+      connectorQueryCtx->taskId() + "/" + connectorQueryCtx->planNodeId() +
+          "/" + std::to_string(connectorQueryCtx->driverId()));
 }
 
 std::unique_ptr<DataSink> ClpConnector::createDataSink(

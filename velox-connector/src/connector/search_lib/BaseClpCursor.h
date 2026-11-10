@@ -34,6 +34,9 @@ class Expression;
 
 namespace facebook::velox::connector::clp::search_lib {
 
+// thesis-metrics: timers and counters of the scan; see ClpScanStats.h.
+class ClpScanStats;
+
 enum class ErrorCode {
   DictionaryNotFound,
   InternalError,
@@ -69,10 +72,12 @@ class BaseClpCursor {
  public:
   explicit BaseClpCursor(
       clp_s::InputSource inputSource,
-      std::string_view splitPath)
+      std::string_view splitPath,
+      std::shared_ptr<ClpScanStats> scanStats = nullptr)
       : errorCode_(ErrorCode::QueryNotInitialized),
         inputSource_(inputSource),
-        splitPath_(std::string(splitPath)) {}
+        splitPath_(std::string(splitPath)),
+        scanStats_(std::move(scanStats)) {}
   virtual ~BaseClpCursor() = default;
 
   /// Executes a query. This function parses, validates, and prepares the given
@@ -126,6 +131,8 @@ class BaseClpCursor {
   std::vector<Field> outputColumns_;
   std::string query_;
   std::string splitPath_;
+  // thesis-metrics: null when the cursor is not measured.
+  std::shared_ptr<ClpScanStats> scanStats_;
 
  private:
   /// Preprocesses the query, performing parsing, validation, and optimization.

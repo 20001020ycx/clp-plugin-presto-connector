@@ -14,6 +14,7 @@
 package com.facebook.presto.plugin.clp.optimization;
 
 import com.facebook.presto.plugin.clp.ClpColumnHandle;
+import com.facebook.presto.plugin.clp.ClpThesisMetrics;
 import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ConnectorPlanOptimizer;
 import com.facebook.presto.spi.ConnectorPlanRewriter;
@@ -69,7 +70,13 @@ public final class ClpUdfRewriter
     @Override
     public PlanNode optimize(PlanNode maxSubplan, ConnectorSession session, VariableAllocator allocator, PlanNodeIdAllocator idAllocator)
     {
-        return rewriteWith(new Rewriter(idAllocator, allocator, collectExistingScanAssignments(maxSubplan)), maxSubplan);
+        long thesisStart = System.nanoTime();
+        try {
+            return rewriteWith(new Rewriter(idAllocator, allocator, collectExistingScanAssignments(maxSubplan)), maxSubplan);
+        }
+        finally {
+            ClpThesisMetrics.addNanos(session, "clpUdfRewriterNanos", System.nanoTime() - thesisStart);
+        }
     }
 
     /**
