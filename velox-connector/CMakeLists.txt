@@ -109,8 +109,15 @@ add_subdirectory(src)
 
 # Plugin target
 add_library(clp-plugin-velox-connector SHARED
+        src/ClpHostCompatibility.cpp
         src/ClpPluginEntry.cpp
         src/ClpPrestoToVeloxConnector.cpp
+)
+
+# The Presto commit that the plugin was built against, which it logs when a Presto worker loads it.
+target_compile_definitions(clp-plugin-velox-connector
+        PRIVATE
+        CLP_PLUGIN_PRESTO_GIT_TAG="${PRESTO_GIT_TAG}"
 )
 
 target_include_directories(clp-plugin-velox-connector
@@ -124,6 +131,7 @@ target_link_libraries(clp-plugin-velox-connector
         PRIVATE
         presto_clp_protocol
         presto_clp_connector
+        ${CMAKE_DL_LIBS}
 )
 
 # Hide all symbols by default to prevent ODR clashes with the Presto worker.

@@ -22,13 +22,21 @@ include(GoogleTest)
 add_executable(clp-plugin-velox-connector-unit-tests
     ClpS3UrlTest.cpp
     ClpTimestampPrecisionTest.cpp
+    ClpVtableLayoutTest.cpp
 )
+
+# `ClpVtableLayoutTest.cpp` looks up vtables that the test binary itself exports.
+set_target_properties(clp-plugin-velox-connector-unit-tests PROPERTIES ENABLE_EXPORTS ON)
 
 target_include_directories(clp-plugin-velox-connector-unit-tests
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../src"
 )
 
-target_link_libraries(clp-plugin-velox-connector-unit-tests PRIVATE GTest::gtest_main)
+target_link_libraries(clp-plugin-velox-connector-unit-tests
+    PRIVATE
+    GTest::gtest_main
+    ${CMAKE_DL_LIBS}
+)
 
 gtest_discover_tests(clp-plugin-velox-connector-unit-tests)
