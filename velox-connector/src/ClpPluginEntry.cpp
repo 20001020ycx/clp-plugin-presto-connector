@@ -12,12 +12,15 @@
  * limitations under the License.
  */
 
+#include "ClpHostCompatibility.h"
 #include "ClpPrestoToVeloxConnector.h"
 #include "presto_cpp/main/connectors/Registration.h"
 #include "connector/ClpConnector.h"
 
 /// Entry point called by presto_server after dlopen().
 extern "C" __attribute__((visibility("default"))) void registerExtensions() {
+  facebook::presto::verifyHostCompatibility();
+
   facebook::presto::registerConnectorFactory(
       std::make_shared<facebook::velox::connector::clp::ClpConnectorFactory>());
 
