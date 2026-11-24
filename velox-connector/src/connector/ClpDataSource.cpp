@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
+#include <glog/logging.h>
+
 #include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
 
 #include "connector/ClpColumnHandle.h"
 #include "connector/ClpConnectorSplit.h"
@@ -27,13 +32,51 @@
 
 namespace facebook::velox::connector::clp {
 
+namespace {
+
+using search_lib::ScanMetricUnit;
+using search_lib::ScanPhase;
+using search_lib::ScanPhaseTimer;
+
+RuntimeCounter::Unit toVeloxUnit(ScanMetricUnit unit) {
+  switch (unit) {
+    case ScanMetricUnit::kNanos:
+      return RuntimeCounter::Unit::kNanos;
+    case ScanMetricUnit::kBytes:
+      return RuntimeCounter::Unit::kBytes;
+    case ScanMetricUnit::kNone:
+    default:
+      return RuntimeCounter::Unit::kNone;
+  }
+}
+
+/// @return `value` as the contents of a JSON string.
+std::string escapeJson(std::string_view value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (char const c : value) {
+    if ('"' == c || '\\' == c) {
+      escaped.push_back('\\');
+    }
+    escaped.push_back(c);
+  }
+  return escaped;
+}
+
+} // namespace
+
 ClpDataSource::ClpDataSource(
     const RowTypePtr& outputType,
     const ConnectorTableHandlePtr& tableHandle,
     const connector::ColumnHandleMap& columnHandles,
     velox::memory::MemoryPool* pool,
-    std::shared_ptr<const ClpConfig>& clpConfig)
-    : pool_(pool), outputType_(outputType) {
+    std::shared_ptr<const ClpConfig>& clpConfig,
+    std::string scanLabel)
+    : pool_(pool),
+      outputType_(outputType),
+      scanStats_(std::make_shared<search_lib::ClpScanStats>()),
+      logSplitStats_(clpConfig->logSplitStats()),
+      scanLabel_(std::move(scanLabel)) {
   auto clpTableHandle =
       std::dynamic_pointer_cast<const ClpTableHandle>(tableHandle);
   storageType_ = clpConfig->storageType();
@@ -55,6 +98,47 @@ ClpDataSource::ClpDataSource(
     auto columnType = clpColumnHandle->columnType();
     addFieldsRecursively(columnType, columnName);
   }
+}
+
+ClpDataSource::~ClpDataSource() {
+  // A split that the scan abandoned, for example once the query had enough
+  // rows. The TableScan took its last snapshot of the metrics before this, so
+  // this close reaches only the per-split log.
+  closeCursor();
+}
+
+uint64_t ClpDataSource::getCompletedBytes() {
+  return scanStats_->bytesConsumed();
+}
+
+std::unordered_map<std::string, RuntimeMetric>
+ClpDataSource::getRuntimeStats() {
+  std::unordered_map<std::string, RuntimeMetric> result;
+  for (auto const& [name, metric] : scanStats_->metrics()) {
+    RuntimeMetric runtimeMetric(toVeloxUnit(metric.unit));
+    runtimeMetric.sum = metric.sum;
+    runtimeMetric.count = metric.count;
+    runtimeMetric.min = metric.min;
+    runtimeMetric.max = metric.max;
+    result.emplace(name, runtimeMetric);
+  }
+  return result;
+}
+
+void ClpDataSource::closeCursor() {
+  if (nullptr == cursor_) {
+    return;
+  }
+  {
+    ScanPhaseTimer timer(scanStats_.get(), ScanPhase::kCloseArchive);
+    cursor_.reset();
+  }
+  if (logSplitStats_) {
+    LOG(INFO) << "CLP split stats {\"scan\":\"" << escapeJson(scanLabel_)
+              << "\",\"path\":\"" << escapeJson(splitPath_)
+              << "\",\"metrics\":" << scanStats_->describeSplit() << "}";
+  }
+  scanStats_->finishSplit();
 }
 
 void ClpDataSource::addFieldsRecursively(
@@ -100,7 +184,15 @@ void ClpDataSource::addFieldsRecursively(
 }
 
 void ClpDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
+  // The TableScan adds a split only after `next` has finished the previous one
+  // and closed its cursor; this closes one that was left open regardless.
+  closeCursor();
+
   auto clpSplit = std::dynamic_pointer_cast<ClpConnectorSplit>(split);
+  scanStats_->beginSplit();
+  // The split's path as the coordinator sent it, not the signed URL.
+  splitPath_ = clpSplit->path_;
+  ScanPhaseTimer timer(scanStats_.get(), ScanPhase::kAddSplit);
 
   std::string splitPath = clpSplit->path_;
   clp_s::InputSource inputSource;
@@ -117,7 +209,7 @@ void ClpDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
 
   if (ClpConnectorSplit::SplitType::kArchive == clpSplit->type_) {
     cursor_ = std::make_unique<search_lib::ClpArchiveCursor>(
-        inputSource, splitPath, std::move(networkAuthOption));
+        inputSource, splitPath, std::move(networkAuthOption), scanStats_);
   } else if (ClpConnectorSplit::SplitType::kIr == clpSplit->type_) {
     cursor_ = std::make_unique<search_lib::ClpIrCursor>(
         inputSource, splitPath, std::move(networkAuthOption), true);
@@ -137,14 +229,24 @@ void ClpDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
 std::optional<RowVectorPtr> ClpDataSource::next(
     uint64_t size,
     ContinueFuture& future) {
-  auto rowsScanned = cursor_->fetchNext(size);
-  auto rowsFiltered = cursor_->getNumFilteredRows();
-  if (rowsFiltered == 0) {
-    return nullptr;
+  RowVectorPtr result;
+  {
+    ScanPhaseTimer timer(scanStats_.get(), ScanPhase::kNext);
+    auto rowsScanned = cursor_->fetchNext(size);
+    auto rowsFiltered = cursor_->getNumFilteredRows();
+    if (rowsFiltered != 0) {
+      completedRows_ += rowsScanned;
+      result = std::dynamic_pointer_cast<RowVector>(
+          cursor_->createVector(pool_, outputType_, rowsFiltered));
+    }
   }
-  completedRows_ += rowsScanned;
-  return std::dynamic_pointer_cast<RowVector>(
-      cursor_->createVector(pool_, outputType_, rowsFiltered));
+  if (nullptr == result) {
+    // The split is finished. Closing its archive now, rather than when the
+    // next split arrives, lets the TableScan's end-of-split snapshot of
+    // `getRuntimeStats` include the close, the last split's too.
+    closeCursor();
+  }
+  return result;
 }
 
 } // namespace facebook::velox::connector::clp

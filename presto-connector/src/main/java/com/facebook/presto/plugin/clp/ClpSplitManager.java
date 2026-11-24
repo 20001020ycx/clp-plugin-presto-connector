@@ -11,8 +11,12 @@
  */
 package com.facebook.presto.plugin.clp;
 
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.GET_SPLITS_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.LIST_SPLITS_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.SPLIT_COUNT;
 import static java.util.Objects.requireNonNull;
 
+import java.util.List;
 import javax.inject.Inject;
 
 import com.facebook.presto.spi.ConnectorSession;
@@ -39,7 +43,20 @@ public class ClpSplitManager implements ConnectorSplitManager {
             ConnectorTableLayoutHandle layout,
             SplitSchedulingContext splitSchedulingContext
     ) {
+        long start = System.nanoTime();
         ClpTableLayoutHandle layoutHandle = (ClpTableLayoutHandle)layout;
-        return new FixedSplitSource(clpSplitProvider.listSplits(layoutHandle));
+        // The split providers have no session; they leave their own timers pending on this thread.
+        ClpRuntimeMetrics.clearPending();
+        List<ClpSplit> splits;
+        try {
+            splits = clpSplitProvider.listSplits(layoutHandle);
+        } finally {
+            ClpRuntimeMetrics.addNanos(session, LIST_SPLITS_NANOS, System.nanoTime() - start);
+            ClpRuntimeMetrics.flushPending(session);
+        }
+        ClpRuntimeMetrics.addCount(session, SPLIT_COUNT, splits.size());
+        ConnectorSplitSource splitSource = new FixedSplitSource(splits);
+        ClpRuntimeMetrics.addNanos(session, GET_SPLITS_NANOS, System.nanoTime() - start);
+        return splitSource;
     }
 }

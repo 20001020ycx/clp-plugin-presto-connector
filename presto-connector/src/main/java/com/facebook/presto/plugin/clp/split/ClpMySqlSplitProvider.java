@@ -11,6 +11,9 @@
  */
 package com.facebook.presto.plugin.clp.split;
 
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.LIST_SPLITS_CONNECT_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.LIST_SPLITS_FETCH_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.LIST_SPLITS_QUERY_NANOS;
 import static com.facebook.presto.plugin.clp.ClpSplit.SplitType.ARCHIVE;
 import static java.lang.String.format;
 
@@ -26,6 +29,7 @@ import com.facebook.airlift.log.Logger;
 import com.google.common.collect.ImmutableList;
 
 import com.facebook.presto.plugin.clp.ClpConfig;
+import com.facebook.presto.plugin.clp.ClpRuntimeMetrics;
 import com.facebook.presto.plugin.clp.ClpSplit;
 import com.facebook.presto.plugin.clp.ClpTableHandle;
 import com.facebook.presto.plugin.clp.ClpTableLayoutHandle;
@@ -77,12 +81,19 @@ public class ClpMySqlSplitProvider implements ClpSplitProvider {
         }
         log.debug("Query for archive: %s", archivePathQuery);
 
+        // Connecting, running the query, and reading its rows into splits; the split manager
+        // flushes these into the query's statistics.
+        long start = System.nanoTime();
         try (Connection connection = getConnection()) {
+            long connected = System.nanoTime();
+            ClpRuntimeMetrics.pendingNanos(LIST_SPLITS_CONNECT_NANOS, connected - start);
             // Fetch archive IDs and create splits
             try (
                     PreparedStatement statement = connection.prepareStatement(archivePathQuery);
                     ResultSet resultSet = statement.executeQuery()
             ) {
+                long executed = System.nanoTime();
+                ClpRuntimeMetrics.pendingNanos(LIST_SPLITS_QUERY_NANOS, executed - connected);
                 while (resultSet.next()) {
                     final String archiveId = resultSet.getString(ARCHIVES_TABLE_COLUMN_ID);
                     final String archivePath = tablePath + "/" + archiveId;
@@ -90,6 +101,10 @@ public class ClpMySqlSplitProvider implements ClpSplitProvider {
                             new ClpSplit(archivePath, ARCHIVE, clpTableLayoutHandle.getKqlQuery())
                     );
                 }
+                ClpRuntimeMetrics.pendingNanos(
+                        LIST_SPLITS_FETCH_NANOS,
+                        System.nanoTime() - executed
+                );
             }
         } catch (SQLException e) {
             log.warn("Database error while processing splits for %s: %s", tableName, e);

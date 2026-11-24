@@ -12,6 +12,7 @@
 package com.facebook.presto.plugin.clp.optimization;
 
 import static com.facebook.presto.plugin.clp.ClpConnectorFactory.CONNECTOR_NAME;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COMPUTE_PUSH_DOWN_NANOS;
 import static com.facebook.presto.spi.ConnectorPlanRewriter.rewriteWith;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -39,6 +40,7 @@ import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import com.google.common.collect.ImmutableSet;
 
 import com.facebook.presto.plugin.clp.ClpExpression;
+import com.facebook.presto.plugin.clp.ClpRuntimeMetrics;
 import com.facebook.presto.plugin.clp.ClpTableHandle;
 import com.facebook.presto.plugin.clp.ClpTableLayoutHandle;
 import com.facebook.presto.plugin.clp.split.filter.ClpSplitFilterProvider;
@@ -69,14 +71,16 @@ public class ClpComputePushDown implements ConnectorPlanOptimizer {
             VariableAllocator variableAllocator,
             PlanNodeIdAllocator idAllocator
     ) {
-        Rewriter rewriter = new Rewriter(idAllocator);
-        PlanNode optimizedPlanNode = rewriteWith(rewriter, maxSubplan);
+        return ClpRuntimeMetrics.time(session, COMPUTE_PUSH_DOWN_NANOS, () -> {
+            Rewriter rewriter = new Rewriter(idAllocator);
+            PlanNode optimizedPlanNode = rewriteWith(rewriter, maxSubplan);
 
-        // Throw exception if any required split filters are missing
-        if (!rewriter.tableScopeSet.isEmpty() && !rewriter.hasVisitedFilter) {
-            splitFilterProvider.checkContainsRequiredFilters(rewriter.tableScopeSet, "");
-        }
-        return optimizedPlanNode;
+            // Throw exception if any required split filters are missing
+            if (!rewriter.tableScopeSet.isEmpty() && !rewriter.hasVisitedFilter) {
+                splitFilterProvider.checkContainsRequiredFilters(rewriter.tableScopeSet, "");
+            }
+            return optimizedPlanNode;
+        });
     }
 
     private class Rewriter extends ConnectorPlanRewriter<Void> {

@@ -24,6 +24,7 @@
 
 #include "clp_s/InputConfig.hpp"
 #include "connector/ClpConnectorSplit.h"
+#include "connector/search_lib/ClpScanStats.h"
 
 namespace clp_s {
 class BaseColumnReader;
@@ -72,14 +73,17 @@ class BaseClpCursor {
   /// @param splitPath
   /// @param networkAuthOption How to authenticate the requests for a network
   /// split.
+  /// @param scanStats The scan's timers and counters, or null to measure nothing.
   explicit BaseClpCursor(
       clp_s::InputSource inputSource,
       std::string_view splitPath,
-      clp_s::NetworkAuthOption networkAuthOption)
+      clp_s::NetworkAuthOption networkAuthOption,
+      std::shared_ptr<ClpScanStats> scanStats = nullptr)
       : errorCode_(ErrorCode::QueryNotInitialized),
         inputSource_(inputSource),
         networkAuthOption_(std::move(networkAuthOption)),
-        splitPath_(std::string(splitPath)) {}
+        splitPath_(std::string(splitPath)),
+        scanStats_(std::move(scanStats)) {}
   virtual ~BaseClpCursor() = default;
 
   /// Executes a query. This function parses, validates, and prepares the given
@@ -126,6 +130,12 @@ class BaseClpCursor {
   /// @return The error code.
   virtual ErrorCode loadSplit() = 0;
 
+  void addCounter(ScanCounter counter, uint64_t value) {
+    if (nullptr != scanStats_) {
+      scanStats_->addCounter(counter, value);
+    }
+  }
+
   bool currentSplitLoaded_{false};
   ErrorCode errorCode_;
   std::shared_ptr<clp_s::search::ast::Expression> expr_;
@@ -134,6 +144,7 @@ class BaseClpCursor {
   std::vector<Field> outputColumns_;
   std::string query_;
   std::string splitPath_;
+  std::shared_ptr<ClpScanStats> scanStats_;
 
  private:
   /// Preprocesses the query, performing parsing, validation, and optimization.

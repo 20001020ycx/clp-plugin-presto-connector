@@ -92,6 +92,22 @@ FetchContent_Declare(clp
 )
 FetchContent_MakeAvailable(clp)
 
+# The scan's storage metrics come from a counting reader that the plugin slips between CLP and the
+# readers it opens on archives, without changing CLP (see
+# src/connector/search_lib/ClpCountingReader.cpp). The plugin is linked with `--wrap` on
+# `clp_s::try_create_reader`, below.
+#
+# CLP's Release build uses link-time optimization, and the linker ignores `--wrap`, silently, for a
+# call that LTO resolves inside its own code. So the one CLP file that defines the function is
+# compiled without LTO. The function runs once per archive, so this costs nothing measurable. The
+# scan logs a warning, and the integration tests fail, if the wrapper is ever bypassed.
+set(CLP_TRY_CREATE_READER_SYMBOL "_ZN5clp_s17try_create_readerERKNS_4PathERKNS_17NetworkAuthOptionE")
+set_source_files_properties(
+        "${clp_SOURCE_DIR}/components/core/src/clp_s/InputConfig.cpp"
+        TARGET_DIRECTORY clp_s_io
+        PROPERTIES COMPILE_OPTIONS "-fno-lto"
+)
+
 # ==============================================================================
 # AWS SDK for C++
 # ==============================================================================
@@ -145,9 +161,13 @@ include_directories(
 add_subdirectory(src)
 
 # Plugin target
+#
+# ClpCountingReader.cpp belongs to the shared library itself, not to a static library, so that the
+# linker always has the `__wrap_` definition at hand.
 add_library(clp-plugin-velox-connector SHARED
         src/ClpPluginEntry.cpp
         src/ClpPrestoToVeloxConnector.cpp
+        src/connector/search_lib/ClpCountingReader.cpp
 )
 
 target_include_directories(clp-plugin-velox-connector
@@ -157,10 +177,16 @@ target_include_directories(clp-plugin-velox-connector
         ${PRESTO_ROOT}/velox
 )
 
+target_compile_definitions(clp-plugin-velox-connector
+        PRIVATE
+        CLP_TRY_CREATE_READER_SYMBOL="${CLP_TRY_CREATE_READER_SYMBOL}"
+)
+
 target_link_libraries(clp-plugin-velox-connector
         PRIVATE
         presto_clp_protocol
         presto_clp_connector
+        clp_s::io
 )
 
 # Hide all symbols by default to prevent ODR clashes with the Presto worker.
@@ -182,4 +208,5 @@ set_target_properties(clp-plugin-velox-connector
 target_link_options(clp-plugin-velox-connector
         PRIVATE
         -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/plugin.map
+        -Wl,--wrap=${CLP_TRY_CREATE_READER_SYMBOL}
 )

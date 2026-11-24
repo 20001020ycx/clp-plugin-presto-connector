@@ -13,6 +13,16 @@ target_include_directories(clp_connector_s3_auth
         ${CMAKE_CURRENT_SOURCE_DIR}/../..
 )
 
+# The scan's timers and counters. Free of Velox and CLP, so `tests/` builds the same source.
+add_library(clp_connector_scan_stats STATIC
+        ClpScanStats.cpp
+)
+
+target_include_directories(clp_connector_scan_stats
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/../..
+)
+
 target_link_libraries(clp_connector_s3_auth
         PUBLIC
         clp_s::io
@@ -40,6 +50,7 @@ target_link_libraries(clp_connector_search
         clp_connector_s3_auth
         clp_connector_search_archive
         clp_connector_search_ir
+        clp_connector_scan_stats
         PRIVATE
         clp_s::search::kql
         clp_s::search::ast

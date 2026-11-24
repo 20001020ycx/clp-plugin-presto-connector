@@ -35,6 +35,7 @@ void BaseClpCursor::executeQuery(
     const std::vector<Field>& outputColumns) {
   query_ = query;
   outputColumns_ = outputColumns;
+  ScanPhaseTimer timer(scanStats_.get(), ScanPhase::kParseQuery);
   errorCode_ = preprocessQuery();
 }
 

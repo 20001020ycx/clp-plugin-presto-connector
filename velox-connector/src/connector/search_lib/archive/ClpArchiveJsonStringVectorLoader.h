@@ -17,6 +17,7 @@
 #pragma once
 
 #include "clp_s/SchemaReader.hpp"
+#include "connector/search_lib/ClpScanStats.h"
 #include "velox/vector/FlatVector.h"
 #include "velox/vector/LazyVector.h"
 
@@ -26,13 +27,19 @@ namespace facebook::velox::connector::clp::search_lib {
 /// JSON string from CLP column readers for the archive format.
 class ClpArchiveJsonStringVectorLoader : public VectorLoader {
  public:
+  /// @param schemaReader
+  /// @param filteredRowIndices
+  /// @param scanStats The scan's timers and counters, or null to measure
+  /// nothing.
   ClpArchiveJsonStringVectorLoader(
       clp_s::SchemaReader* schemaReader,
-      const std::shared_ptr<std::vector<uint64_t>>& filteredRowIndices);
+      const std::shared_ptr<std::vector<uint64_t>>& filteredRowIndices,
+      std::shared_ptr<ClpScanStats> scanStats = nullptr);
 
  private:
   clp_s::SchemaReader* schemaReader_;
   std::shared_ptr<std::vector<uint64_t>> filteredRowIndices_;
+  std::shared_ptr<ClpScanStats> scanStats_;
 
   void loadInternal(
       RowSet rows,

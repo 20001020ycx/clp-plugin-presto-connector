@@ -17,10 +17,12 @@
 #pragma once
 
 #include <set>
+#include <string>
 
 #include "velox/connectors/Connector.h"
 #include "connector/ClpConfig.h"
 #include "connector/search_lib/BaseClpCursor.h"
+#include "connector/search_lib/ClpScanStats.h"
 
 namespace clp_s {
 class BaseColumnReader;
@@ -32,12 +34,22 @@ class ClpS3AuthProviderBase;
 
 class ClpDataSource : public DataSource {
  public:
+  /// @param outputType
+  /// @param tableHandle
+  /// @param columnHandles
+  /// @param pool
+  /// @param clpConfig
+  /// @param scanLabel Names the scan in the per-split log lines (see
+  /// `ClpConfig::kLogSplitStats`).
   ClpDataSource(
       const RowTypePtr& outputType,
       const ConnectorTableHandlePtr& tableHandle,
       const connector::ColumnHandleMap& columnHandles,
       velox::memory::MemoryPool* pool,
-      std::shared_ptr<const ClpConfig>& clpConfig);
+      std::shared_ptr<const ClpConfig>& clpConfig,
+      std::string scanLabel = "");
+
+  ~ClpDataSource() override;
 
   void addSplit(std::shared_ptr<ConnectorSplit> split) override;
 
@@ -50,17 +62,17 @@ class ClpDataSource : public DataSource {
     VELOX_NYI("Dynamic filters not supported by ClpConnector.");
   }
 
-  uint64_t getCompletedBytes() override {
-    return completedBytes_;
-  }
+  /// @return The archive bytes the scan has taken from storage.
+  uint64_t getCompletedBytes() override;
 
   uint64_t getCompletedRows() override {
     return completedRows_;
   }
 
-  std::unordered_map<std::string, RuntimeMetric> getRuntimeStats() override {
-    return {};
-  }
+  /// @return The scan's timers and counters, as running totals over its
+  /// splits. Velox replaces the values it has with these on each call. The
+  /// metrics are described in docs/runtime-metrics.md.
+  std::unordered_map<std::string, RuntimeMetric> getRuntimeStats() override;
 
  private:
   /// Recursively adds fields from the column type to the list of fields to be
@@ -72,17 +84,25 @@ class ClpDataSource : public DataSource {
       const TypePtr& columnType,
       const std::string& parentName);
 
+  /// Destroys the split's cursor, which closes its archive, and finishes the
+  /// split's metrics. Does nothing without a cursor.
+  void closeCursor();
+
   ClpConfig::StorageType storageType_;
   velox::memory::MemoryPool* pool_;
   RowTypePtr outputType_;
   std::set<std::string> columnUntypedNames_;
   uint64_t completedRows_{0};
-  uint64_t completedBytes_{0};
 
   std::vector<search_lib::Field> fields_;
 
   std::unique_ptr<search_lib::BaseClpCursor> cursor_;
   std::shared_ptr<ClpS3AuthProviderBase> s3AuthProvider_;
+
+  std::shared_ptr<search_lib::ClpScanStats> scanStats_;
+  bool logSplitStats_{false};
+  std::string scanLabel_;
+  std::string splitPath_;
 };
 
 } // namespace facebook::velox::connector::clp

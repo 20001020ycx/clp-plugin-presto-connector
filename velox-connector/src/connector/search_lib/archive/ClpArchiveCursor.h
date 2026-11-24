@@ -41,7 +41,8 @@ class ClpArchiveCursor final : public BaseClpCursor {
   explicit ClpArchiveCursor(
       clp_s::InputSource inputSource,
       std::string_view splitPath,
-      clp_s::NetworkAuthOption networkAuthOption);
+      clp_s::NetworkAuthOption networkAuthOption,
+      std::shared_ptr<ClpScanStats> scanStats = nullptr);
   ~ClpArchiveCursor() override;
 
   uint64_t fetchNext(uint64_t numRows) override;

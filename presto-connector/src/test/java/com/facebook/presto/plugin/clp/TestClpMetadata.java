@@ -16,6 +16,17 @@ import static com.facebook.presto.common.type.BooleanType.BOOLEAN;
 import static com.facebook.presto.common.type.DoubleType.DOUBLE;
 import static com.facebook.presto.common.type.VarcharType.VARCHAR;
 import static com.facebook.presto.plugin.clp.ClpMetadata.DEFAULT_SCHEMA_NAME;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COLUMN_HANDLE_CACHE_HITS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COLUMN_HANDLE_CACHE_LOAD_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COLUMN_HANDLE_CACHE_LOOKUP_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COLUMN_HANDLE_CACHE_MISSES;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.METADATA_GET_COLUMN_HANDLES_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.METADATA_GET_TABLE_HANDLE_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.METADATA_GET_TABLE_METADATA_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.TABLE_HANDLE_CACHE_HITS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.TABLE_HANDLE_CACHE_LOAD_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.TABLE_HANDLE_CACHE_LOOKUP_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.TABLE_HANDLE_CACHE_MISSES;
 import static com.facebook.presto.plugin.clp.metadata.ClpSchemaTreeNodeType.Boolean;
 import static com.facebook.presto.plugin.clp.metadata.ClpSchemaTreeNodeType.ClpString;
 import static com.facebook.presto.plugin.clp.metadata.ClpSchemaTreeNodeType.Float;
@@ -23,14 +34,20 @@ import static com.facebook.presto.plugin.clp.metadata.ClpSchemaTreeNodeType.Inte
 import static com.facebook.presto.plugin.clp.metadata.ClpSchemaTreeNodeType.UnstructuredArray;
 import static com.facebook.presto.plugin.clp.metadata.ClpSchemaTreeNodeType.VarString;
 import static com.facebook.presto.testing.TestingConnectorSession.SESSION;
+import static com.facebook.presto.testing.TestingSession.testSessionBuilder;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
 
 import java.util.HashSet;
 import java.util.Optional;
 
+import com.facebook.presto.common.RuntimeStats;
+import com.facebook.presto.common.RuntimeUnit;
 import com.facebook.presto.common.type.ArrayType;
 import com.facebook.presto.common.type.RowType;
 import com.facebook.presto.spi.ColumnMetadata;
+import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.spi.ConnectorTableHandle;
 import com.facebook.presto.spi.ConnectorTableMetadata;
 import com.facebook.presto.spi.SchemaTableName;
 import com.google.common.collect.ImmutableList;
@@ -91,6 +108,44 @@ public class TestClpMetadata {
     @Test
     public void testListSchemaNames() {
         assertEquals(metadata.listSchemaNames(SESSION), ImmutableList.of(DEFAULT_SCHEMA_NAME));
+    }
+
+    @Test
+    public void testRecordsRuntimeMetrics() {
+        ConnectorSession session = testSessionBuilder().build().toConnectorSession();
+        SchemaTableName tableName = new SchemaTableName(DEFAULT_SCHEMA_NAME, TABLE_NAME);
+        ConnectorTableHandle tableHandle = metadata.getTableHandle(session, tableName);
+        metadata.getTableHandle(session, tableName);
+        metadata.getColumnHandles(session, tableHandle);
+        metadata.getTableMetadata(session, tableHandle);
+
+        RuntimeStats stats = session.getRuntimeStats();
+        assertEquals(stats.getMetric(METADATA_GET_TABLE_HANDLE_NANOS).getCount(), 2);
+        assertEquals(stats.getMetric(METADATA_GET_COLUMN_HANDLES_NANOS).getCount(), 1);
+        assertEquals(stats.getMetric(METADATA_GET_TABLE_METADATA_NANOS).getCount(), 1);
+        assertEquals(stats.getMetric(METADATA_GET_TABLE_HANDLE_NANOS).getUnit(), RuntimeUnit.NANO);
+
+        // The first lookup in each cache runs the loader; the second is served from the cache.
+        assertEquals(stats.getMetric(TABLE_HANDLE_CACHE_MISSES).getSum(), 1);
+        assertEquals(stats.getMetric(TABLE_HANDLE_CACHE_HITS).getSum(), 1);
+        assertEquals(stats.getMetric(TABLE_HANDLE_CACHE_LOOKUP_NANOS).getCount(), 2);
+        assertEquals(stats.getMetric(TABLE_HANDLE_CACHE_LOAD_NANOS).getCount(), 1);
+        assertEquals(stats.getMetric(COLUMN_HANDLE_CACHE_MISSES).getSum(), 1);
+        assertEquals(stats.getMetric(COLUMN_HANDLE_CACHE_HITS).getSum(), 1);
+        assertEquals(stats.getMetric(COLUMN_HANDLE_CACHE_LOOKUP_NANOS).getCount(), 2);
+        assertEquals(stats.getMetric(COLUMN_HANDLE_CACHE_LOAD_NANOS).getCount(), 1);
+
+        // Each timer lies inside the one around it.
+        assertTrue(
+                stats.getMetric(TABLE_HANDLE_CACHE_LOAD_NANOS).getSum() <= stats.getMetric(
+                        TABLE_HANDLE_CACHE_LOOKUP_NANOS
+                ).getSum()
+        );
+        assertTrue(
+                stats.getMetric(TABLE_HANDLE_CACHE_LOOKUP_NANOS).getSum() <= stats.getMetric(
+                        METADATA_GET_TABLE_HANDLE_NANOS
+                ).getSum()
+        );
     }
 
     @Test

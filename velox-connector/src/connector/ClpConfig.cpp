@@ -57,6 +57,7 @@ ClpConfig::ClpConfig(std::shared_ptr<const config::ConfigBase> config) {
 
   storageType_ =
       stringToStorageType(config_->get<std::string>(kStorageType, "FS"));
+  logSplitStats_ = config_->get<bool>(kLogSplitStats, false);
 
   if (StorageType::kS3 == storageType_) {
     // The provider authenticates this catalog's S3 requests with its own
@@ -81,6 +82,10 @@ std::shared_ptr<ClpS3AuthProviderBase> ClpConfig::s3AuthProvider() const {
 
 ClpConfig::StorageType ClpConfig::storageType() const {
   return storageType_;
+}
+
+bool ClpConfig::logSplitStats() const {
+  return logSplitStats_;
 }
 
 } // namespace facebook::velox::connector::clp

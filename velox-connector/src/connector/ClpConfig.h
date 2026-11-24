@@ -38,6 +38,9 @@ class ClpConfig {
 
   static constexpr const char* kAuthProvider = "clp.s3-auth-provider";
   static constexpr const char* kStorageType = "clp.storage-type";
+  /// Whether to write one line per split, with its scan metrics, to the
+  /// worker's log. Off by default.
+  static constexpr const char* kLogSplitStats = "clp.log-split-stats";
 
   explicit ClpConfig(std::shared_ptr<const config::ConfigBase> config);
 
@@ -48,11 +51,13 @@ class ClpConfig {
 
   StorageType storageType() const;
   std::shared_ptr<ClpS3AuthProviderBase> s3AuthProvider() const;
+  bool logSplitStats() const;
 
  private:
   std::shared_ptr<const config::ConfigBase> config_;
   std::shared_ptr<ClpS3AuthProviderBase> s3AuthProvider_;
   StorageType storageType_;
+  bool logSplitStats_{false};
 };
 
 } // namespace facebook::velox::connector::clp
