@@ -40,6 +40,12 @@ def client() -> PrestoClient:
 
 
 @pytest.fixture(scope="session")
+def fixture_dir() -> Path:
+    """The directory of fixtures that the cluster serves, one subdirectory per table."""
+    return _FIXTURE_DIR
+
+
+@pytest.fixture(scope="session")
 def fixture_tables() -> list[str]:
     """The table names that the connector should report: one for each directory of fixtures."""
     tables = sorted(entry.name for entry in _FIXTURE_DIR.iterdir() if entry.is_dir())

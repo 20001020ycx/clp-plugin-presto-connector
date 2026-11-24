@@ -21,12 +21,20 @@ include(GoogleTest)
 
 add_executable(clp-plugin-velox-connector-unit-tests
     ClpS3UrlTest.cpp
+    ClpScanStatsTest.cpp
     ClpTimestampPrecisionTest.cpp
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/connector/search_lib/ClpScanStats.cpp"
 )
 
 target_include_directories(clp-plugin-velox-connector-unit-tests
     PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/../src"
+)
+
+# ClpScanStatsTest checks that every metric the scan reports is in the glossary.
+target_compile_definitions(clp-plugin-velox-connector-unit-tests
+    PRIVATE
+    CLP_RUNTIME_METRICS_GLOSSARY="${CMAKE_CURRENT_SOURCE_DIR}/../../docs/runtime-metrics.md"
 )
 
 target_link_libraries(clp-plugin-velox-connector-unit-tests PRIVATE GTest::gtest_main)

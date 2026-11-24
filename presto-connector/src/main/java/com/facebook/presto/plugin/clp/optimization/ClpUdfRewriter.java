@@ -12,6 +12,7 @@
 package com.facebook.presto.plugin.clp.optimization;
 
 import static com.facebook.presto.plugin.clp.ClpErrorCode.CLP_PUSHDOWN_UNSUPPORTED_EXPRESSION;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.UDF_REWRITER_NANOS;
 import static com.facebook.presto.spi.ConnectorPlanRewriter.rewriteWith;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.util.Objects.requireNonNull;
@@ -44,6 +45,7 @@ import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import io.airlift.slice.Slice;
 
 import com.facebook.presto.plugin.clp.ClpColumnHandle;
+import com.facebook.presto.plugin.clp.ClpRuntimeMetrics;
 
 /**
  * Utility for rewriting CLP UDFs (e.g., <code>CLP_GET_*</code>) in {@link RowExpression} trees.
@@ -69,9 +71,17 @@ public final class ClpUdfRewriter implements ConnectorPlanOptimizer {
             VariableAllocator allocator,
             PlanNodeIdAllocator idAllocator
     ) {
-        return rewriteWith(
-                new Rewriter(idAllocator, allocator, collectExistingScanAssignments(maxSubplan)),
-                maxSubplan
+        return ClpRuntimeMetrics.time(
+                session,
+                UDF_REWRITER_NANOS,
+                () -> rewriteWith(
+                        new Rewriter(
+                                idAllocator,
+                                allocator,
+                                collectExistingScanAssignments(maxSubplan)
+                        ),
+                        maxSubplan
+                )
         );
     }
 

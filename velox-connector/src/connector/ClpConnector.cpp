@@ -29,12 +29,19 @@ std::unique_ptr<DataSource> ClpConnector::createDataSource(
     const ConnectorTableHandlePtr& tableHandle,
     const connector::ColumnHandleMap& columnHandles,
     ConnectorQueryCtx* connectorQueryCtx) {
+  std::string scanLabel;
+  if (config_->logSplitStats()) {
+    scanLabel = connectorQueryCtx->taskId() + "/" +
+        connectorQueryCtx->planNodeId() + "/" +
+        std::to_string(connectorQueryCtx->driverId());
+  }
   return std::make_unique<ClpDataSource>(
       outputType,
       tableHandle,
       columnHandles,
       connectorQueryCtx->memoryPool(),
-      config_);
+      config_,
+      std::move(scanLabel));
 }
 
 std::unique_ptr<DataSink> ClpConnector::createDataSink(

@@ -13,6 +13,8 @@ target_include_directories(clp_connector_search_archive
 )
 
 target_link_libraries(clp_connector_search_archive
+        PUBLIC
+        clp_connector_scan_stats
         PRIVATE
         clp_s::archive_reader
         clp_s::clp_dependencies

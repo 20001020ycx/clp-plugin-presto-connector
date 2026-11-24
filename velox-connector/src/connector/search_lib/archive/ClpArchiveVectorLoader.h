@@ -20,6 +20,7 @@
 
 #include "clp_s/ColumnReader.hpp"
 #include "clp_s/SchemaTree.hpp"
+#include "connector/search_lib/ClpScanStats.h"
 #include "velox/type/Timestamp.h"
 #include "velox/vector/FlatVector.h"
 #include "velox/vector/LazyVector.h"
@@ -37,10 +38,16 @@ enum class ColumnType;
 /// integers, floats, booleans, strings, and arrays of strings.
 class ClpArchiveVectorLoader : public VectorLoader {
  public:
+  /// @param columnReader
+  /// @param nodeType
+  /// @param filteredRowIndices
+  /// @param scanStats The scan's timers and counters, or null to measure
+  /// nothing.
   ClpArchiveVectorLoader(
       clp_s::BaseColumnReader* columnReader,
       ColumnType nodeType,
-      const std::shared_ptr<std::vector<uint64_t>> filteredRowIndices);
+      const std::shared_ptr<std::vector<uint64_t>> filteredRowIndices,
+      std::shared_ptr<ClpScanStats> scanStats = nullptr);
 
  private:
   inline static thread_local std::unique_ptr<simdjson::ondemand::parser>
@@ -49,6 +56,7 @@ class ClpArchiveVectorLoader : public VectorLoader {
   clp_s::BaseColumnReader* columnReader_;
   ColumnType nodeType_;
   std::shared_ptr<std::vector<uint64_t>> filteredRowIndices_;
+  std::shared_ptr<ClpScanStats> scanStats_;
 
   void loadInternal(
       RowSet rows,

@@ -11,6 +11,19 @@
  */
 package com.facebook.presto.plugin.clp;
 
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COLUMN_HANDLE_CACHE_HITS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COLUMN_HANDLE_CACHE_LOAD_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COLUMN_HANDLE_CACHE_LOOKUP_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.COLUMN_HANDLE_CACHE_MISSES;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.METADATA_GET_COLUMN_HANDLES_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.METADATA_GET_TABLE_HANDLE_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.METADATA_GET_TABLE_METADATA_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.METADATA_LIST_TABLES_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.METADATA_LIST_TABLE_COLUMNS_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.TABLE_HANDLE_CACHE_HITS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.TABLE_HANDLE_CACHE_LOAD_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.TABLE_HANDLE_CACHE_LOOKUP_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.TABLE_HANDLE_CACHE_MISSES;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static java.util.Objects.requireNonNull;
@@ -87,15 +100,17 @@ public class ClpMetadata implements ConnectorMetadata {
 
     @Override
     public List<SchemaTableName> listTables(ConnectorSession session, Optional<String> schemaName) {
-        String schemaNameValue = schemaName.orElse(DEFAULT_SCHEMA_NAME);
-        if (!listSchemaNames(session).contains(schemaNameValue)) { return ImmutableList.of(); }
+        return ClpRuntimeMetrics.time(session, METADATA_LIST_TABLES_NANOS, () -> {
+            String schemaNameValue = schemaName.orElse(DEFAULT_SCHEMA_NAME);
+            if (!listSchemaNames(session).contains(schemaNameValue)) { return ImmutableList.of(); }
 
-        return listTables(schemaNameValue).stream().map(
-                tableHandle -> new SchemaTableName(
-                        schemaNameValue,
-                        tableHandle.getSchemaTableName().getTableName()
-                )
-        ).collect(toImmutableList());
+            return listTableHandles(session, schemaNameValue).stream().map(
+                    tableHandle -> new SchemaTableName(
+                            schemaNameValue,
+                            tableHandle.getSchemaTableName().getTableName()
+                    )
+            ).collect(toImmutableList());
+        });
     }
 
     @Override
@@ -103,12 +118,14 @@ public class ClpMetadata implements ConnectorMetadata {
             ConnectorSession session,
             SchemaTableName tableName
     ) {
-        String schemaName = tableName.getSchemaName();
-        if (!listSchemaNames(session).contains(schemaName)) { return null; }
+        return ClpRuntimeMetrics.time(session, METADATA_GET_TABLE_HANDLE_NANOS, () -> {
+            String schemaName = tableName.getSchemaName();
+            if (!listSchemaNames(session).contains(schemaName)) { return null; }
 
-        return listTables(schemaName).stream().filter(
-                tableHandle -> tableHandle.getSchemaTableName().equals(tableName)
-        ).findFirst().orElse(null);
+            return listTableHandles(session, schemaName).stream().filter(
+                    tableHandle -> tableHandle.getSchemaTableName().equals(tableName)
+            ).findFirst().orElse(null);
+        });
     }
 
     @Override
@@ -138,17 +155,33 @@ public class ClpMetadata implements ConnectorMetadata {
             ConnectorSession session,
             ConnectorTableHandle table
     ) {
-        ClpTableHandle clpTableHandle = (ClpTableHandle)table;
-        SchemaTableName schemaTableName = clpTableHandle.getSchemaTableName();
-        List<ColumnMetadata> columns = listColumns(schemaTableName).stream().map(
-                ClpColumnHandle::getColumnMetadata
-        ).collect(toImmutableList());
+        return ClpRuntimeMetrics.time(session, METADATA_GET_TABLE_METADATA_NANOS, () -> {
+            ClpTableHandle clpTableHandle = (ClpTableHandle)table;
+            SchemaTableName schemaTableName = clpTableHandle.getSchemaTableName();
+            List<ColumnMetadata> columns = listColumnHandles(session, schemaTableName).stream().map(
+                    ClpColumnHandle::getColumnMetadata
+            ).collect(toImmutableList());
 
-        return new ConnectorTableMetadata(schemaTableName, columns);
+            return new ConnectorTableMetadata(schemaTableName, columns);
+        });
     }
 
+    /**
+     * Its duration includes those of the calls it makes to the other metadata methods.
+     */
     @Override
     public Map<SchemaTableName, List<ColumnMetadata>> listTableColumns(
+            ConnectorSession session,
+            SchemaTablePrefix prefix
+    ) {
+        return ClpRuntimeMetrics.time(
+                session,
+                METADATA_LIST_TABLE_COLUMNS_NANOS,
+                () -> listTableColumnsUntimed(session, prefix)
+        );
+    }
+
+    private Map<SchemaTableName, List<ColumnMetadata>> listTableColumnsUntimed(
             ConnectorSession session,
             SchemaTablePrefix prefix
     ) {
@@ -184,10 +217,12 @@ public class ClpMetadata implements ConnectorMetadata {
             ConnectorSession session,
             ConnectorTableHandle tableHandle
     ) {
-        ClpTableHandle clpTableHandle = (ClpTableHandle)tableHandle;
-        return listColumns(clpTableHandle.getSchemaTableName()).stream().collect(
-                toImmutableMap(ClpColumnHandle::getColumnName, column -> column)
-        );
+        return ClpRuntimeMetrics.time(session, METADATA_GET_COLUMN_HANDLES_NANOS, () -> {
+            ClpTableHandle clpTableHandle = (ClpTableHandle)tableHandle;
+            return listColumnHandles(session, clpTableHandle.getSchemaTableName()).stream().collect(
+                    toImmutableMap(ClpColumnHandle::getColumnName, column -> column)
+            );
+        });
     }
 
     @Override
@@ -200,20 +235,74 @@ public class ClpMetadata implements ConnectorMetadata {
         return clpColumnHandle.getColumnMetadata();
     }
 
+    // The caches run these loaders on the thread of the lookup that misses (or that refreshes an
+    // entry), so the lookup finds the loader's duration pending and counts a miss.
     private List<ClpColumnHandle> loadColumnHandles(SchemaTableName schemaTableName) {
-        return clpMetadataProvider.listColumnHandles(schemaTableName);
+        long start = System.nanoTime();
+        try {
+            return clpMetadataProvider.listColumnHandles(schemaTableName);
+        } finally {
+            ClpRuntimeMetrics.pendingNanos(
+                    COLUMN_HANDLE_CACHE_LOAD_NANOS,
+                    System.nanoTime() - start
+            );
+        }
     }
 
     private List<ClpTableHandle> loadTableHandles(String schemaName) {
-        return clpMetadataProvider.listTableHandles(schemaName);
+        long start = System.nanoTime();
+        try {
+            return clpMetadataProvider.listTableHandles(schemaName);
+        } finally {
+            ClpRuntimeMetrics.pendingNanos(
+                    TABLE_HANDLE_CACHE_LOAD_NANOS,
+                    System.nanoTime() - start
+            );
+        }
     }
 
-    private List<ClpColumnHandle> listColumns(SchemaTableName schemaTableName) {
-        return columnHandleCache.getUnchecked(schemaTableName);
+    private List<ClpColumnHandle> listColumnHandles(
+            ConnectorSession session,
+            SchemaTableName schemaTableName
+    ) {
+        return lookUp(
+                session,
+                columnHandleCache,
+                schemaTableName,
+                COLUMN_HANDLE_CACHE_LOOKUP_NANOS,
+                COLUMN_HANDLE_CACHE_HITS,
+                COLUMN_HANDLE_CACHE_MISSES
+        );
     }
 
-    private List<ClpTableHandle> listTables(String schemaName) {
-        return tableHandleCache.getUnchecked(schemaName);
+    private List<ClpTableHandle> listTableHandles(ConnectorSession session, String schemaName) {
+        return lookUp(
+                session,
+                tableHandleCache,
+                schemaName,
+                TABLE_HANDLE_CACHE_LOOKUP_NANOS,
+                TABLE_HANDLE_CACHE_HITS,
+                TABLE_HANDLE_CACHE_MISSES
+        );
+    }
+
+    private static <K, V> V lookUp(
+            ConnectorSession session,
+            LoadingCache<K, V> cache,
+            K key,
+            String lookupNanos,
+            String hits,
+            String misses
+    ) {
+        ClpRuntimeMetrics.clearPending();
+        long start = System.nanoTime();
+        try {
+            return cache.getUnchecked(key);
+        } finally {
+            ClpRuntimeMetrics.addNanos(session, lookupNanos, System.nanoTime() - start);
+            boolean loaded = ClpRuntimeMetrics.flushPending(session);
+            ClpRuntimeMetrics.addCount(session, loaded ? misses : hits, 1);
+        }
     }
 
     // Presto 0.297 added normalizeIdentifier() to MetadataManager.getColumnHandles(), which

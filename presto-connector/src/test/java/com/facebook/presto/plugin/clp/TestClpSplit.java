@@ -13,14 +13,25 @@ package com.facebook.presto.plugin.clp;
 
 import static com.facebook.presto.plugin.clp.ClpMetadata.DEFAULT_SCHEMA_NAME;
 import static com.facebook.presto.plugin.clp.ClpMetadataDbSetUp.ARCHIVES_STORAGE_DIRECTORY_BASE;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.GET_SPLITS_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.LIST_SPLITS_CONNECT_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.LIST_SPLITS_FETCH_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.LIST_SPLITS_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.LIST_SPLITS_QUERY_NANOS;
+import static com.facebook.presto.plugin.clp.ClpRuntimeMetrics.SPLIT_COUNT;
+import static com.facebook.presto.testing.TestingSession.testSessionBuilder;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static java.lang.String.format;
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import com.facebook.presto.common.RuntimeStats;
+import com.facebook.presto.common.RuntimeUnit;
+import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.SchemaTableName;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -190,6 +201,46 @@ public class TestClpSplit {
                     ImmutableList.of(1)
             );
         }
+    }
+
+    @Test
+    public void testGetSplitsRecordsRuntimeMetrics() {
+        ConnectorSession session = testSessionBuilder().build().toConnectorSession();
+        String tableName = tableSplits.keySet().iterator().next();
+        ClpTableLayoutHandle layoutHandle = new ClpTableLayoutHandle(
+                new ClpTableHandle(
+                        new SchemaTableName(DEFAULT_SCHEMA_NAME, tableName),
+                        ARCHIVES_STORAGE_DIRECTORY_BASE + tableName
+                ),
+                Optional.empty(),
+                Optional.empty()
+        );
+        new ClpSplitManager(clpSplitProvider).getSplits(null, session, layoutHandle, null).close();
+
+        RuntimeStats stats = session.getRuntimeStats();
+        assertEquals(stats.getMetric(SPLIT_COUNT).getSum(), 10);
+        assertEquals(stats.getMetric(SPLIT_COUNT).getUnit(), RuntimeUnit.NONE);
+        for (
+            String name : ImmutableList.of(
+                    GET_SPLITS_NANOS,
+                    LIST_SPLITS_NANOS,
+                    LIST_SPLITS_CONNECT_NANOS,
+                    LIST_SPLITS_QUERY_NANOS,
+                    LIST_SPLITS_FETCH_NANOS
+            )
+        ) {
+            assertEquals(stats.getMetric(name).getCount(), 1, name);
+            assertEquals(stats.getMetric(name).getUnit(), RuntimeUnit.NANO, name);
+        }
+
+        // The MySQL steps lie inside the listing, and the listing inside getSplits.
+        long listSplitsNanos = stats.getMetric(LIST_SPLITS_NANOS).getSum();
+        assertTrue(
+                stats.getMetric(LIST_SPLITS_CONNECT_NANOS).getSum() + stats.getMetric(
+                        LIST_SPLITS_QUERY_NANOS
+                ).getSum() + stats.getMetric(LIST_SPLITS_FETCH_NANOS).getSum() <= listSplitsNanos
+        );
+        assertTrue(listSplitsNanos <= stats.getMetric(GET_SPLITS_NANOS).getSum());
     }
 
     private void compareListSplitsResult(
