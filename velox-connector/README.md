@@ -7,7 +7,9 @@
   * A machine with:
     * CMake >= 3.28.3 and < 4.0
     * A C++20 compiler
+    * A [Rust toolchain][rustup] (`cargo`), needed to build log-surgeon
     * The following libraries:
+      * `libarchive-dev`
       * `libcurl4-openssl-dev`
       * `libevent-dev`
       * `libssl-dev`
@@ -38,5 +40,6 @@ cmake --build build/velox-connector -j
 The built plugin will be at `build/velox-connector/libclp-plugin-velox-connector.so`.
 
 [presto-native-dependency]: https://hub.docker.com/r/prestodb/presto-native-dependency
+[rustup]: https://rustup.rs
 [Task]: https://taskfile.dev
 [velox-deps-setup]: https://github.com/facebookincubator/velox#setting-up-dependencies

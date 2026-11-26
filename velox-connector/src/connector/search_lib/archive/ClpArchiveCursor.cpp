@@ -14,16 +14,22 @@
  * limitations under the License.
  */
 
+#include <cstring>
+#include <optional>
+
 #include <glog/logging.h>
 
 #include "clp_s/ArchiveReader.hpp"
+#include "clp_s/ArchiveReaderAdaptor.hpp"
 #include "clp_s/SingleFileArchiveDefs.hpp"
 #include "clp_s/search/EvaluateTimestampIndex.hpp"
+#include "clp_s/search/Projection.hpp"
 #include "clp_s/search/ast/EmptyExpr.hpp"
 #include "clp_s/search/ast/SearchUtils.hpp"
 #include "clp_s/search/ast/SetTimestampLiteralPrecision.hpp"
 #include "clp_s/search/ast/TimestampLiteral.hpp"
 #include "connector/ClpColumnHandle.h"
+#include "connector/search_lib/ClpArchiveVersion.h"
 #include "connector/search_lib/archive/ClpArchiveCursor.h"
 #include "connector/search_lib/archive/ClpArchiveJsonStringVectorLoader.h"
 #include "connector/search_lib/archive/ClpArchiveVectorLoader.h"
@@ -35,16 +41,57 @@ using namespace clp_s::search::ast;
 
 namespace facebook::velox::connector::clp::search_lib {
 
+namespace {
+
+/// Reads an archive's header, even if the rest of its metadata can't be parsed.
+///
+/// @param archivePath
+/// @param networkAuthOption
+/// @return The header, or std::nullopt if it can't be read or the path isn't a
+/// clp-s archive.
+std::optional<ArchiveHeader> readArchiveHeader(
+    Path const& archivePath,
+    NetworkAuthOption const& networkAuthOption) {
+  try {
+    ArchiveReaderAdaptor adaptor{archivePath, networkAuthOption};
+    try {
+      static_cast<void>(adaptor.load_archive_metadata());
+    } catch (std::exception const&) {
+      // The header is read before the rest of the metadata, so it is set even
+      // if parsing the metadata fails.
+    }
+    auto const& header = adaptor.get_header();
+    if (0 !=
+        std::memcmp(
+            header.magic_number,
+            cStructuredSFAMagicNumber.data(),
+            cStructuredSFAMagicNumber.size())) {
+      return std::nullopt;
+    }
+    return header;
+  } catch (std::exception const&) {
+    return std::nullopt;
+  }
+}
+
+} // namespace
+
 ClpArchiveCursor::ClpArchiveCursor(
     clp_s::InputSource inputSource,
     std::string_view splitPath)
     : BaseClpCursor(inputSource, splitPath),
-      archiveReader_(std::make_shared<ArchiveReader>()),
       filteredRowIndices_(std::make_shared<std::vector<uint64_t>>()) {}
 
-ClpArchiveCursor::~ClpArchiveCursor() {
-  if (currentSplitLoaded_) {
-    archiveReader_->close();
+ClpArchiveCursor::~ClpArchiveCursor() = default;
+
+void ClpArchiveCursor::throwIfArchiveVersionUnsupported(
+    std::optional<ArchiveHeader> const& header) const {
+  if (false == header.has_value()) {
+    return;
+  }
+  if (auto error = checkClpArchiveVersion(
+          splitPath_, header->version, cArchiveVersion)) {
+    VELOX_USER_FAIL("{}", error.value());
   }
 }
 
@@ -77,7 +124,7 @@ uint64_t ClpArchiveCursor::fetchNext(uint64_t numRows) {
 
       schemaReader_ =
           &archiveReader_->read_schema_table(currentSchemaId_, false, false);
-      schemaReader_->initialize_filter_with_column_map(queryRunner_.get());
+      schemaReader_->initialize_filter_with_column_map(*queryRunner_);
 
       errorCode_ = ErrorCode::Success;
       currentSchemaTableLoaded_ = true;
@@ -126,18 +173,23 @@ ErrorCode ClpArchiveCursor::loadSplit() {
   auto networkAuthOption = inputSource_ == InputSource::Filesystem
       ? NetworkAuthOption{.method = AuthMethod::None}
       : NetworkAuthOption{.method = AuthMethod::S3PresignedUrlV4};
+  auto const archivePath = get_path_object_for_raw_path(splitPath_);
 
   try {
-    archiveReader_->open(
-        get_path_object_for_raw_path(splitPath_), networkAuthOption);
+    archiveReader_ = std::make_shared<ArchiveReader>(
+        archivePath, ArchiveReader::Options{.network_auth = networkAuthOption});
   } catch (std::exception& e) {
+    // A newer archive format usually fails while its metadata is parsed, so
+    // read the header on its own to report the version instead.
+    throwIfArchiveVersionUnsupported(
+        readArchiveHeader(archivePath, networkAuthOption));
     VLOG(2) << "Failed to open archive file: " << e.what();
     return ErrorCode::InternalError;
   }
+  throwIfArchiveVersionUnsupported(archiveReader_->get_header());
 
   auto timestampDict = archiveReader_->get_timestamp_dictionary();
   auto schemaTree = archiveReader_->get_schema_tree();
-  auto schemaMap = archiveReader_->get_schema_map();
 
   auto const defaultTimestampPrecision{
       archiveReader_->has_deprecated_timestamp_format()
@@ -153,15 +205,16 @@ ErrorCode ClpArchiveCursor::loadSplit() {
     return ErrorCode::InvalidTimestampRange;
   }
 
-  schemaMatch_ = std::make_shared<SchemaMatch>(schemaTree, schemaMap);
+  schemaMatch_ =
+      std::make_shared<SchemaMatch>(archiveReader_, /*case_sensitive=*/true);
   if (expr_ = schemaMatch_->run(expr_);
       std::dynamic_pointer_cast<EmptyExpr>(expr_)) {
     VLOG(2) << "No matching schemas for query '" << query_ << "'";
     return ErrorCode::SchemaNotFound;
   }
 
-  projection_ = std::make_shared<Projection>(
-      outputColumns_.empty() ? ReturnAllColumns : ReturnSelectedColumns, true);
+  // For each projected column, the IDs of the schema tree nodes it matches.
+  std::vector<std::vector<int32_t>> projectedNodeIds;
   try {
     for (size_t i = 0; i < outputColumns_.size(); i++) {
       auto const& column = outputColumns_[i];
@@ -206,15 +259,28 @@ ErrorCode ClpArchiveCursor::loadSplit() {
           break;
       }
 
-      projection_->add_column(columnDescriptor);
+      // `Projection` doesn't expose which nodes each of its columns matched, so
+      // resolve each column with its own `Projection` to keep the nodes in
+      // output column order.
+      Projection columnProjection{Projection::Mode::Explicit};
+      columnProjection.add_column(columnDescriptor);
+      columnProjection.resolve_columns(*schemaTree);
+      auto& nodeIds = projectedNodeIds.emplace_back();
+      for (auto const& node : schemaTree->get_nodes()) {
+        if (columnProjection.matches_node(node.get_id())) {
+          nodeIds.push_back(node.get_id());
+        }
+      }
     }
   } catch (TraceableException& e) {
     VLOG(2) << e.what();
     return ErrorCode::InternalError;
   }
-  projection_->resolve_columns(schemaTree);
 
-  archiveReader_->read_metadata();
+  if (auto const result = archiveReader_->read_metadata(); result.has_error()) {
+    VLOG(2) << "Failed to read archive metadata: " << result.error().message();
+    return ErrorCode::InternalError;
+  }
 
   matchedSchemas_.clear();
   for (auto schemaId : archiveReader_->get_schema_ids()) {
@@ -233,17 +299,13 @@ ErrorCode ClpArchiveCursor::loadSplit() {
     return ErrorCode::InvalidTimestampRange;
   }
 
-  archiveReader_->read_variable_dictionary();
-  archiveReader_->read_log_type_dictionary();
-  archiveReader_->read_array_dictionary();
-
   currentSchemaIndex_ = 0;
   currentSchemaTableLoaded_ = false;
 
   archiveReader_->open_packed_streams();
   currentSplitLoaded_ = true;
   queryRunner_ = std::make_shared<ClpQueryRunner>(
-      schemaMatch_, expr_, archiveReader_, false, projection_);
+      schemaMatch_, expr_, archiveReader_, false, std::move(projectedNodeIds));
   queryRunner_->global_init();
   return ErrorCode::Success;
 }

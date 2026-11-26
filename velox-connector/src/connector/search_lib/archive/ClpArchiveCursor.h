@@ -16,17 +16,18 @@
 
 #pragma once
 
+#include <optional>
 #include <unordered_set>
 
 #include "connector/search_lib/BaseClpCursor.h"
 
 namespace clp_s {
+struct ArchiveHeader;
 class ArchiveReader;
 class SchemaReader;
 } // namespace clp_s
 
 namespace clp_s::search {
-class Projection;
 class SchemaMatch;
 } // namespace clp_s::search
 
@@ -63,7 +64,6 @@ class ClpArchiveCursor final : public BaseClpCursor {
   bool currentSchemaTableLoaded_{false};
   std::shared_ptr<std::vector<uint64_t>> filteredRowIndices_;
   std::vector<int32_t> matchedSchemas_;
-  std::shared_ptr<clp_s::search::Projection> projection_;
   std::shared_ptr<ClpQueryRunner> queryRunner_;
   size_t columnIndex_{0};
   size_t projectedColumnIndex_{0};
@@ -71,6 +71,14 @@ class ClpArchiveCursor final : public BaseClpCursor {
   std::shared_ptr<clp_s::search::SchemaMatch> schemaMatch_;
 
   const std::vector<clp_s::BaseColumnReader*>& getProjectedColumns() const;
+
+  /// Throws a VeloxUserError if the archive's format is newer than this
+  /// connector can read.
+  ///
+  /// @param header The archive's header, or std::nullopt if it couldn't be
+  /// read.
+  void throwIfArchiveVersionUnsupported(
+      std::optional<clp_s::ArchiveHeader> const& header) const;
 
   VectorPtr createVectorHelper(
       memory::MemoryPool* pool,

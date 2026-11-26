@@ -9,11 +9,11 @@ vars:
   # Library names (must match CMake package names for settings files)
   G_BOOST_LIB_NAME: "Boost"
   G_DOUBLE_CONVERSION_LIB_NAME: "double-conversion"
-  G_FAST_FLOAT_LIB_NAME: "fast_float"
+  G_FAST_FLOAT_LIB_NAME: "FastFloat"
   G_FMT_LIB_NAME: "fmt"
   G_GFLAGS_LIB_NAME: "gflags"
   G_GLOG_LIB_NAME: "glog"
-  G_GSL_LIB_NAME: "Microsoft.GSL"
+  G_PROTOBUF_LIB_NAME: "Protobuf"
   G_YSTDLIB_LIB_NAME: "ystdlib"
 
   # Velox header-dependency versions
@@ -52,13 +52,15 @@ tasks:
       - "gflags"
       - "glog"
       - "log-surgeon"
-      - "microsoft-gsl"
       - "msgpack-cxx"
       - "nlohmann-json"
+      - "opentelemetry-cpp"
+      - "protobuf"
       - "re2"
       - "simdjson"
       - "spdlog"
       - "xsimd"
+      - "xxhash"
       - "ystdlib"
       - "zstd"
 
@@ -307,45 +309,18 @@ tasks:
   log-surgeon:
     internal: true
     run: "once"
-    deps:
-      - "fmt"
-      - "microsoft-gsl"
-      - "ystdlib"
     cmds:
       - task: "yscope-dev-utils:cmake:install-remote-tar"
         vars:
           CMAKE_GEN_ARGS:
-            - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_BOOST_LIB_NAME}}.cmake"
-            - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_FMT_LIB_NAME}}.cmake"
-            - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_GSL_LIB_NAME}}.cmake"
-            - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_YSTDLIB_LIB_NAME}}.cmake"
             - "-DCMAKE_BUILD_TYPE=Release"
             - "-DCMAKE_INSTALL_MESSAGE=LAZY"
             - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
             - "-Dlog_surgeon_BUILD_TESTING=OFF"
-          CMAKE_PACKAGE_NAME: "log_surgeon"
+          CMAKE_PACKAGE_NAME: "log-surgeon"
           CMAKE_SETTINGS_DIR: "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}"
-          TAR_SHA256: "eebf857962f8fc022bfa5de8d00e10ee4ac36bb8f126a556935a93dde1435aa2"
-          TAR_URL: "https://github.com/y-scope/log-surgeon/archive/193e1f9.tar.gz"
-          WORK_DIR: "{{.G_DEPS_CPP_DIR}}"
-
-  microsoft-gsl:
-    internal: true
-    vars:
-      VERSION: "v4.0.0"
-    run: "once"
-    cmds:
-      - task: "yscope-dev-utils:cmake:install-remote-tar"
-        vars:
-          CMAKE_GEN_ARGS:
-            - "-DCMAKE_BUILD_TYPE=Release"
-            - "-DCMAKE_INSTALL_MESSAGE=LAZY"
-            - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
-            - "-DGSL_TEST=OFF"
-          CMAKE_PACKAGE_NAME: "{{.G_GSL_LIB_NAME}}"
-          CMAKE_SETTINGS_DIR: "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}"
-          TAR_SHA256: "f0e32cb10654fea91ad56bde89170d78cfbf4363ee0b01d8f097de2ba49f6ce9"
-          TAR_URL: "https://github.com/microsoft/GSL/archive/refs/tags/{{.VERSION}}.tar.gz"
+          TAR_SHA256: "da94979c62299e91ff5f292c0d360017e23c43686ca3a4710b8b082e1c376e4a"
+          TAR_URL: "https://github.com/y-scope/log-surgeon/archive/b7fceed.tar.gz"
           WORK_DIR: "{{.G_DEPS_CPP_DIR}}"
 
   msgpack-cxx:
@@ -394,6 +369,67 @@ tasks:
           # release tarball, since the latter is served from githubusercontent.com which is blocked
           # by some developers' firewalls. The contents of the former are a superset of the latter.
           TAR_URL: "https://github.com/nlohmann/json/archive/refs/tags/{{.VERSION}}.tar.gz"
+          WORK_DIR: "{{.G_DEPS_CPP_DIR}}"
+
+  opentelemetry-cpp:
+    internal: true
+    vars:
+      VERSION: "1.27.0"
+    run: "once"
+    deps:
+      - "absl"
+      - "nlohmann-json"
+      - "protobuf"
+    cmds:
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
+        vars:
+          CMAKE_GEN_ARGS:
+            - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/absl.cmake"
+            - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/nlohmann_json.cmake"
+            - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/{{.G_PROTOBUF_LIB_NAME}}.cmake"
+            - "-DBUILD_TESTING=OFF"
+            - "-DCMAKE_BUILD_TYPE=Release"
+            - "-DCMAKE_CXX_STANDARD=20"
+            - "-DCMAKE_INSTALL_MESSAGE=LAZY"
+            - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
+            - "-DOPENTELEMETRY_INSTALL=ON"
+            - "-DWITH_BENCHMARK=OFF"
+            - "-DWITH_EXAMPLES=OFF"
+            - "-DWITH_FUNC_TESTS=OFF"
+            - "-DWITH_OTLP_GRPC=OFF"
+            - "-DWITH_OTLP_HTTP=ON"
+          CMAKE_PACKAGE_NAME: "opentelemetry-cpp"
+          CMAKE_SETTINGS_DIR: "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}"
+          TAR_SHA256: "d09c2e8dd95bbc1d6ee493a89f32a4736879948d0eb59ad58c855022d1f55cc1"
+          TAR_URL: "https://github.com/open-telemetry/opentelemetry-cpp/archive/refs/tags/\
+                      v{{.VERSION}}.tar.gz"
+          WORK_DIR: "{{.G_DEPS_CPP_DIR}}"
+
+  protobuf:
+    internal: true
+    vars:
+      VERSION: "31.1"
+    run: "once"
+    deps:
+      - "absl"
+    cmds:
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
+        vars:
+          CMAKE_GEN_ARGS:
+            - "-C {{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/absl.cmake"
+            - "-DCMAKE_BUILD_TYPE=Release"
+            - "-DCMAKE_CXX_STANDARD=20"
+            - "-DCMAKE_INSTALL_MESSAGE=LAZY"
+            - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
+            - "-Dprotobuf_ABSL_PROVIDER=package"
+            - "-Dprotobuf_BUILD_SHARED_LIBS=OFF"
+            - "-Dprotobuf_BUILD_TESTS=OFF"
+            - "-Dprotobuf_INSTALL=ON"
+          CMAKE_PACKAGE_NAME: "{{.G_PROTOBUF_LIB_NAME}}"
+          CMAKE_SETTINGS_DIR: "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}"
+          TAR_SHA256: "12bfd76d27b9ac3d65c00966901609e020481b9474ef75c7ff4601ac06fa0b82"
+          TAR_URL: "https://github.com/protocolbuffers/protobuf/releases/download/\
+                      v{{.VERSION}}/protobuf-{{.VERSION}}.tar.gz"
           WORK_DIR: "{{.G_DEPS_CPP_DIR}}"
 
   re2:
@@ -477,6 +513,27 @@ tasks:
           CACHE PATH
           \"Package root for xsimd.\"
         )" > "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}/xsimd.cmake"
+
+  xxhash:
+    internal: true
+    vars:
+      VERSION: "0.8.3"
+    run: "once"
+    cmds:
+      - task: "yscope-dev-utils:cmake:install-remote-tar"
+        vars:
+          CMAKE_GEN_ARGS:
+            - "-DBUILD_SHARED_LIBS=OFF"
+            - "-DCMAKE_BUILD_TYPE=Release"
+            - "-DCMAKE_INSTALL_MESSAGE=LAZY"
+            - "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
+            - "-DXXHASH_BUILD_XXHSUM=OFF"
+          CMAKE_PACKAGE_NAME: "xxHash"
+          CMAKE_SETTINGS_DIR: "{{.G_DEPS_CPP_CMAKE_SETTINGS_DIR}}"
+          CMAKE_SOURCE_DIR: "cmake_unofficial"
+          TAR_SHA256: "aae608dfe8213dfd05d909a57718ef82f30722c392344583d3f39050c7f29a80"
+          TAR_URL: "https://github.com/Cyan4973/xxHash/archive/refs/tags/v{{.VERSION}}.tar.gz"
+          WORK_DIR: "{{.G_DEPS_CPP_DIR}}"
 
   ystdlib:
     internal: true

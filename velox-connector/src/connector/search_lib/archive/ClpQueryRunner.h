@@ -27,7 +27,6 @@ class BaseColumnReader;
 
 namespace clp_s::search {
 class SchemaMatch;
-class Projection;
 } // namespace clp_s::search
 
 namespace clp_s::search::ast {
@@ -47,9 +46,9 @@ class ClpQueryRunner : public clp_s::search::QueryRunner {
       const std::shared_ptr<clp_s::search::ast::Expression>& expr,
       const std::shared_ptr<clp_s::ArchiveReader>& archiveReader,
       bool ignoreCase,
-      const std::shared_ptr<clp_s::search::Projection>& projection)
+      std::vector<std::vector<int32_t>> projectedNodeIds)
       : clp_s::search::QueryRunner(match, expr, archiveReader, ignoreCase),
-        projection_(projection) {}
+        projectedNodeIds_(std::move(projectedNodeIds)) {}
 
   /// Initializes the filter with schema information and column readers.
   ///
@@ -80,7 +79,8 @@ class ClpQueryRunner : public clp_s::search::QueryRunner {
  private:
   std::shared_ptr<clp_s::search::ast::Expression> expr_;
   std::shared_ptr<clp_s::SchemaTree> schemaTree_;
-  std::shared_ptr<clp_s::search::Projection> projection_;
+  /// For each projected column, the IDs of the schema tree nodes it matches.
+  std::vector<std::vector<int32_t>> projectedNodeIds_;
   std::vector<clp_s::BaseColumnReader*> projectedColumns_;
 
   uint64_t curMessage_{};

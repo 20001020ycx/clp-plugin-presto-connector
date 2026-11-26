@@ -20,6 +20,7 @@ enable_testing()
 include(GoogleTest)
 
 add_executable(clp-plugin-velox-connector-unit-tests
+    ClpArchiveVersionTest.cpp
     ClpS3UrlTest.cpp
     ClpTimestampPrecisionTest.cpp
 )

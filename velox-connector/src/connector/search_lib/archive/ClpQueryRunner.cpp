@@ -29,8 +29,7 @@ void ClpQueryRunner::init(
   clear_readers();
 
   projectedColumns_.clear();
-  auto matchingNodesList = projection_->get_ordered_matching_nodes();
-  for (const auto& nodeIds : matchingNodesList) {
+  for (const auto& nodeIds : projectedNodeIds_) {
     if (nodeIds.empty()) {
       projectedColumns_.push_back(nullptr);
       continue;

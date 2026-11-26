@@ -20,8 +20,8 @@ RUN --mount=type=bind,from=host-ca,source=host-ca,target=${HOST_CA_BUNDLE} \
         dnf_sslcacert_opt="--setopt=sslcacert=${HOST_CA_BUNDLE}"; \
     fi \
  && dnf install -y --setopt=install_weak_deps=False ${dnf_sslcacert_opt} \
-        ccache dpkg gettext git java-17-openjdk-devel libcurl-devel libevent-devel \
-        libunwind-devel ninja-build openssl-devel patchelf python3-pip rpm-build \
+        ccache dpkg gettext git java-17-openjdk-devel libarchive-devel libcurl-devel \
+        libevent-devel libunwind-devel ninja-build openssl-devel patchelf python3-pip rpm-build \
  && dnf clean all
 
 RUN --mount=type=bind,from=host-ca,source=host-ca,target=${HOST_CA_BUNDLE} \
@@ -39,6 +39,17 @@ RUN --mount=type=bind,from=host-ca,source=host-ca,target=${HOST_CA_BUNDLE} \
         | tar xz -C /opt/go-task/bin task
 
 ENV PATH=/opt/go-task/bin:${PATH}
+
+# log-surgeon, a CLP dependency, builds a Rust crate, so installing it needs cargo.
+ENV CARGO_HOME=/opt/rust/cargo
+ENV RUSTUP_HOME=/opt/rust/rustup
+RUN --mount=type=bind,from=host-ca,source=host-ca,target=${HOST_CA_BUNDLE} \
+    set -euxo pipefail; \
+    . "${HOST_CA_ENV}"; \
+    curl --proto "=https" --tlsv1.2 -fsSL https://sh.rustup.rs \
+        | sh -s -- -y --no-modify-path --profile minimal --default-toolchain stable
+
+ENV PATH=/opt/rust/cargo/bin:${PATH}
 
 ENV CLP_PLUGIN_BUILD_DIR=/opt/clp-plugin-presto-connector/build
 ENV CLP_PLUGIN_DEPS_CPP_DIR=/opt/clp-plugin-presto-connector/build/velox-connector/deps/cpp
